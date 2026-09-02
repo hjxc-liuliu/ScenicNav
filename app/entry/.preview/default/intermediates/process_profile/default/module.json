@@ -50,6 +50,12 @@
 						]
 					}
 				]
+			},
+			{
+				"name": "FakeUIAbility",
+				"srcEntry": "../../.preview/fakeuiability/FakeUIAbility.ets",
+				"startWindowIcon": "startIcon",
+				"startWindowBackground": "#FFFFFF"
 			}
 		],
 		"packageName": "entry",

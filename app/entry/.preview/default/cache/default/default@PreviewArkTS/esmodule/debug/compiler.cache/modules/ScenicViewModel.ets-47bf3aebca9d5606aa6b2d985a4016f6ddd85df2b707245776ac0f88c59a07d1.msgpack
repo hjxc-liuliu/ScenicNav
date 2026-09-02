@@ -1,0 +1,625 @@
+Ôr@Ÿªassertions¤code´customTransformCache¬dependencies¢id¤meta±moduleSideEffects¬originalCode±originalSourcemap«resolvedIds®sourcemapChainµsyntheticNamedExportsµtransformDependencies®transformFiles¨cacheAstÔrAÚ$Yimport { ScenicRepository } from '../data/ScenicRepository';
+export class ScenicViewModel {
+    constructor() {
+        this.repository = new ScenicRepository();
+    }
+    formatPrice(price) {
+        return `ï¿¥${price.toFixed(2)}`;
+    }
+    canBook(ticket) {
+        return ticket.remaining > 0;
+    }
+    recommendRoute(preference) {
+        const routes = this.repository.routes();
+        for (let index = 0; index < routes.length; index++) {
+            if (routes[index].tags.indexOf(preference) >= 0) {
+                return routes[index];
+            }
+        }
+        return routes[0];
+    }
+    estimatedWait(queueSize, serviceRatePerMinute) {
+        if (serviceRatePerMinute <= 0) {
+            return 0;
+        }
+        return Math.ceil(queueSize / serviceRatePerMinute);
+    }
+    crowdForSpot(spot, snapshots) {
+        for (let index = 0; index < snapshots.length; index++) {
+            if (snapshots[index].spotId === spot.id) {
+                return snapshots[index];
+            }
+        }
+        return {
+            spotId: spot.id,
+            currentPercent: spot.crowdPercent,
+            forecastPercent: spot.crowdPercent,
+            trend: 'å¹³ç¨³',
+            updatedAt: 'åˆšåˆš'
+        };
+    }
+    crowdLevel(percent) {
+        if (percent <= 45) {
+            return 'ç•…é€š';
+        }
+        if (percent <= 70) {
+            return 'é€‚ä¸­';
+        }
+        if (percent <= 85) {
+            return 'æ‹¥æŒ¤';
+        }
+        return 'ä¸¥é‡æ‹¥æŒ¤';
+    }
+    heatColor(percent) {
+        if (percent <= 45) {
+            return '#2E9B63';
+        }
+        if (percent <= 70) {
+            return '#D7A72E';
+        }
+        if (percent <= 85) {
+            return '#E57C32';
+        }
+        return '#D84A4A';
+    }
+    isHighCrowd(snapshot) {
+        return snapshot.forecastPercent > 70;
+    }
+    generateItinerary(profile, spots, snapshots) {
+        const selectedSpotIds = [];
+        const avoidedSpotNames = [];
+        const targetStopCount = Math.min(spots.length, Math.max(2, Math.floor(profile.durationMinutes / 60)));
+        let elapsedMinutes = 0;
+        let currentX = 31;
+        let currentY = 49;
+        for (let round = 0; round < targetStopCount; round++) {
+            let candidate = this.findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, false);
+            if (candidate === undefined) {
+                candidate = this.findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, true);
+            }
+            if (candidate === undefined) {
+                break;
+            }
+            const travelMinutes = this.estimatedWalkMinutes(currentX, currentY, candidate.x, candidate.y);
+            selectedSpotIds.push(candidate.id);
+            elapsedMinutes = elapsedMinutes + travelMinutes + candidate.stayMinutes;
+            currentX = candidate.x;
+            currentY = candidate.y;
+        }
+        for (let index = 0; index < spots.length; index++) {
+            const snapshot = this.crowdForSpot(spots[index], snapshots);
+            if (this.isHighCrowd(snapshot) && this.interestMatchCount(spots[index], profile.interestTags) > 0) {
+                avoidedSpotNames.push(spots[index].name);
+            }
+        }
+        const comfortScore = this.comfortScore(selectedSpotIds, spots, snapshots);
+        const savedWaitMinutes = avoidedSpotNames.length * 18;
+        const explanation = avoidedSpotNames.length > 0
+            ? `å·²é¿å¼€ ${avoidedSpotNames.join('ã€')} çš„é¢„æµ‹é«˜å³°ï¼Œä¼˜å…ˆå®‰æ’åŒç±»ä½çƒ­åº¦æ™¯ç‚¹ã€‚`
+            : 'å½“å‰å®¢æµå¹³ç¨³ï¼Œå·²æŒ‰å…´è¶£ã€æ­¥è¡Œè·ç¦»ä¸æ¸¸ç©æ—¶é—´ç”Ÿæˆèˆ’é€‚è·¯çº¿ã€‚';
+        return {
+            id: `itinerary-${Date.now()}`,
+            title: `${profile.durationMinutes / 60} å°æ—¶${profile.interestTags.join('Â·')}é”™å³°è¡Œç¨‹`,
+            spotIds: selectedSpotIds,
+            durationMinutes: elapsedMinutes,
+            comfortScore: comfortScore,
+            avoidedSpotNames: avoidedSpotNames,
+            savedWaitMinutes: savedWaitMinutes,
+            explanation: explanation,
+            generatedAt: 'åˆšåˆš'
+        };
+    }
+    replanItinerary(plan, completedCount, profile, spots, snapshots) {
+        const nextSpotIds = [];
+        const replacedNames = [];
+        for (let index = 0; index < plan.spotIds.length; index++) {
+            const spotId = plan.spotIds[index];
+            const spot = this.findSpot(spots, spotId);
+            if (spot === undefined || index < completedCount || !this.isHighCrowd(this.crowdForSpot(spot, snapshots))) {
+                nextSpotIds.push(spotId);
+                continue;
+            }
+            const alternative = this.findAlternative(profile, spots, snapshots, nextSpotIds, plan.spotIds, spotId);
+            if (alternative === undefined) {
+                nextSpotIds.push(spotId);
+                continue;
+            }
+            nextSpotIds.push(alternative.id);
+            replacedNames.push(`${spot.name} â†’ ${alternative.name}`);
+        }
+        if (replacedNames.length === 0) {
+            return { plan: plan, changed: false, reason: 'æœªå‘ç°éœ€è¦ç»•è¡Œçš„æœªåˆ°è¾¾æ™¯ç‚¹ã€‚' };
+        }
+        const reason = `é¢„æµ‹é«˜å³°è§¦å‘ç»•è¡Œï¼š${replacedNames.join('ï¼›')}ã€‚`;
+        const replanned = {
+            id: plan.id,
+            title: plan.title,
+            spotIds: nextSpotIds,
+            durationMinutes: plan.durationMinutes,
+            comfortScore: this.comfortScore(nextSpotIds, spots, snapshots),
+            avoidedSpotNames: plan.avoidedSpotNames,
+            savedWaitMinutes: plan.savedWaitMinutes + replacedNames.length * 18,
+            explanation: reason,
+            generatedAt: 'åˆšåˆš'
+        };
+        return { plan: replanned, changed: true, reason: reason };
+    }
+    findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, allowHighCrowd) {
+        let best = undefined;
+        let bestScore = -100000;
+        for (let index = 0; index < spots.length; index++) {
+            const spot = spots[index];
+            if (this.containsSpotId(selectedSpotIds, spot.id)) {
+                continue;
+            }
+            const snapshot = this.crowdForSpot(spot, snapshots);
+            if (!allowHighCrowd && this.isHighCrowd(snapshot)) {
+                continue;
+            }
+            const walkMinutes = this.estimatedWalkMinutes(currentX, currentY, spot.x, spot.y);
+            if (elapsedMinutes + walkMinutes + spot.stayMinutes > profile.durationMinutes) {
+                continue;
+            }
+            const score = this.interestMatchCount(spot, profile.interestTags) * 100 + (100 - snapshot.forecastPercent) - walkMinutes * 3;
+            if (score > bestScore) {
+                best = spot;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+    findAlternative(profile, spots, snapshots, completedSpotIds, originalSpotIds, replacingSpotId) {
+        let best = undefined;
+        let bestScore = -100000;
+        for (let index = 0; index < spots.length; index++) {
+            const spot = spots[index];
+            if (spot.id === replacingSpotId || this.containsSpotId(completedSpotIds, spot.id) || this.containsSpotId(originalSpotIds, spot.id)) {
+                continue;
+            }
+            const snapshot = this.crowdForSpot(spot, snapshots);
+            if (this.isHighCrowd(snapshot)) {
+                continue;
+            }
+            const score = this.interestMatchCount(spot, profile.interestTags) * 100 + (100 - snapshot.forecastPercent);
+            if (score > bestScore) {
+                best = spot;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+    estimatedWalkMinutes(fromX, fromY, toX, toY) {
+        return Math.max(8, Math.ceil((Math.abs(fromX - toX) + Math.abs(fromY - toY)) / 4));
+    }
+    comfortScore(spotIds, spots, snapshots) {
+        if (spotIds.length === 0) {
+            return 0;
+        }
+        let total = 0;
+        for (let index = 0; index < spotIds.length; index++) {
+            const spot = this.findSpot(spots, spotIds[index]);
+            if (spot !== undefined) {
+                total = total + (100 - this.crowdForSpot(spot, snapshots).forecastPercent);
+            }
+        }
+        return Math.round(total / spotIds.length);
+    }
+    interestMatchCount(spot, interests) {
+        let count = 0;
+        for (let tagIndex = 0; tagIndex < interests.length; tagIndex++) {
+            if (spot.interestTags.indexOf(interests[tagIndex]) >= 0) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+    containsSpotId(spotIds, spotId) {
+        return spotIds.indexOf(spotId) >= 0;
+    }
+    findSpot(spots, spotId) {
+        for (let index = 0; index < spots.length; index++) {
+            if (spots[index].id === spotId) {
+                return spots[index];
+            }
+        }
+        return undefined;
+    }
+}
+//# sourceMappingURL=ScenicViewModel.js.mapÂ‘ÙFD:\Projects\ScenicNav\app\entry\src\main\ets\data\ScenicRepository.etsÙJD:\Projects\ScenicNav\app\entry\src\main\ets\viewmodel\ScenicViewModel.etsÔrBœªmoduleName±isLocalDependency¯isNodeEntryFile§pkgPath±belongProjectPath§pkgNameªpkgVersion±dependencyPkgInfo¯hostModulesInfo°belongModulePath§checker¬shouldEmitJs¥entryÃÂ¿D:\Projects\ScenicNav\app\entry¹D:\Projects\ScenicNav\app¥entry¥1.0.0Ô  ‘ÔrC’²hostDependencyName®hostModuleName¼../viewmodel/ScenicViewModel¥entry¿D:\Projects\ScenicNav\app\entryÔrDÜ ®¬getNodeCount²getIdentifierCount®getSymbolCount¬getTypeCountµgetInstantiationCountµgetRelationCacheSizes±isUndefinedSymbol±isArgumentsSymbol¯isUnknownSymbol¯getMergedSymbol®getDiagnostics´getGlobalDiagnostics´getRecursionIdentity¶getUnmatchedProperties¹getTypeOfSymbolAtLocation¯getTypeOfSymbolÙ(getSymbolsOfParameterPropertyDeclaration·getDeclaredTypeOfSymbol³getPropertiesOfType±getPropertyOfTypeÙ"getPrivateIdentifierPropertyOfType·getTypeOfPropertyOfType²getIndexInfoOfType³getIndexInfosOfTypeºgetIndexInfosOfIndexSymbol³getSignaturesOfType²getIndexTypeOfType¬getIndexType¬getBaseTypes¸getBaseTypeOfLiteralType®getWidenedType³getTypeFromTypeNode°getParameterTypeÙ$getParameterIdentifierNameAtPosition¸getPromisedTypeOfPromise®getAwaitedType¸getReturnTypeOfSignature®isNullableType¯getNullableType²getNonNullableType²getNonOptionalType°getTypeArguments®typeToTypeNodeÙ$indexInfoToIndexSignatureDeclaration¿signatureToSignatureDeclaration²symbolToEntityName²symbolToExpression¬symbolToNodeÙ!symbolToTypeParameterDeclarations¼symbolToParameterDeclarationºtypeParameterToDeclaration±getSymbolsInScope³getSymbolAtLocation·getIndexInfosAtLocationÙ!getShorthandAssignmentValueSymbolÙ#getExportSpecifierLocalTargetSymbol·getExportSymbolOfSymbol±getTypeAtLocationºgetTypeAtLocationForLinterÙ tryGetTypeAtLocationWithoutCheckºgetTypeOfAssignmentPatternÙ*getPropertySymbolOfDestructuringAssignment±signatureToString¬typeToString®symbolToStringµtypePredicateToString®writeSignature©writeType«writeSymbol²writeTypePredicate¼getAugmentedPropertiesOfType®getRootSymbols²getSymbolOfExpando±getContextualTypeÙ(getContextualTypeForObjectLiteralElementÙ#getContextualTypeForArgumentAtIndexÙ getContextualTypeForJsxAttribute²isContextSensitiveÙ!getTypeOfPropertyOfContextualTypeµgetFullyQualifiedNameÙ#tryGetResolvedSignatureWithoutCheck´getResolvedSignatureÙ/getResolvedSignatureForStringLiteralCompletionsÙ$getResolvedSignatureForSignatureHelpµgetExpandedParameters¹hasEffectiveRestParameterºcontainsArgumentsReference°getConstantValueµisValidPropertyAccessÙ#isValidPropertyAccessForCompletions»getSignatureFromDeclarationºisImplementationOfOverload¹getImmediateAliasedSymbol°getAliasedSymbol¯getEmitResolver²getExportsOfModule¿getExportsAndPropertiesOfModuleÙ forEachExportAndPropertyOfModule¯getSymbolWalker±getAmbientModules¹getJsxIntrinsicTagNamesAt³isOptionalParameter»tryGetMemberInModuleExportsÙ(tryGetMemberInModuleExportsAndProperties´tryFindAmbientModuleÙ(tryFindAmbientModuleWithoutAugmentations¯getApparentType¬getUnionType²isTypeAssignableTo³createAnonymousType¯createSignature¬createSymbol¯createIndexInfoªgetAnyType­getStringType­getNumberType±createPromiseType¯createArrayType¹getElementTypeOfArrayType®getBooleanType¬getFalseType«getTrueType«getVoidType°getUndefinedType«getNullType¯getESSymbolType¬getNeverType¯getOptionalType®getPromiseType²getPromiseLikeType´getAsyncIterableType²isSymbolAccessible«isArrayType«isTupleType¯isArrayLikeTypeÙ#isTypeInvalidDueToUnionDiscriminantºgetExactOptionalProperties¿getAllPossiblePropertiesOfTypesÙ(getSuggestedSymbolForNonexistentPropertyÙ#getSuggestionForNonexistentPropertyÙ,getSuggestedSymbolForNonexistentJSXAttributeÙ&getSuggestedSymbolForNonexistentSymbolÙ!getSuggestionForNonexistentSymbolÙ&getSuggestedSymbolForNonexistentModuleÙ!getSuggestionForNonexistentExportÙ+getSuggestedSymbolForNonexistentClassMember·getBaseConstraintOfType»getDefaultFromTypeParameter«resolveName¯getJsxNamespaceµgetJsxFragmentFactory¸getAccessibleSymbolChain»getTypePredicateOfSignature¹resolveExternalModuleName»resolveExternalModuleSymbol°tryGetThisTypeAt¹getTypeArgumentConstraint¸getSuggestionDiagnostics¸runWithCancellationTokenÙ3getLocalTypeParametersOfClassOrInterfaceOrTypeAlias´isDeclarationVisible´isPropertyAccessible»getTypeOnlyAliasDeclaration¿getMemberOverrideModifierStatusÙ!isTypeParameterPossiblyReferenced²getConstEnumRelate´clearConstEnumRelateµdeleteConstEnumRelateÙ$getTypeArgumentsForResolvedSignatureµgetCheckedSourceFilesÙ"collectHaveTsNoCheckFilesForLinter·clearQualifiedNameCache®isStaticRecord²isStaticSourceFileÔ  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  Ô  ÃÃÚ#µimport {
+  CrowdSnapshot,
+  ItineraryPlan,
+  ItineraryProfile,
+  ItineraryReplanResult,
+  RecommendedRoute,
+  ScenicSpot,
+  TicketProduct
+} from '../common/Models';
+import { ScenicRepository } from '../data/ScenicRepository';
+
+export class ScenicViewModel {
+  readonly repository: ScenicRepository = new ScenicRepository();
+
+  formatPrice(price: number): string {
+    return `ï¿¥${price.toFixed(2)}`;
+  }
+
+  canBook(ticket: TicketProduct): boolean {
+    return ticket.remaining > 0;
+  }
+
+  recommendRoute(preference: string): RecommendedRoute {
+    const routes = this.repository.routes();
+    for (let index = 0; index < routes.length; index++) {
+      if (routes[index].tags.indexOf(preference) >= 0) {
+        return routes[index];
+      }
+    }
+    return routes[0];
+  }
+
+  estimatedWait(queueSize: number, serviceRatePerMinute: number): number {
+    if (serviceRatePerMinute <= 0) {
+      return 0;
+    }
+    return Math.ceil(queueSize / serviceRatePerMinute);
+  }
+
+  crowdForSpot(spot: ScenicSpot, snapshots: CrowdSnapshot[]): CrowdSnapshot {
+    for (let index = 0; index < snapshots.length; index++) {
+      if (snapshots[index].spotId === spot.id) {
+        return snapshots[index];
+      }
+    }
+    return {
+      spotId: spot.id,
+      currentPercent: spot.crowdPercent,
+      forecastPercent: spot.crowdPercent,
+      trend: 'å¹³ç¨³',
+      updatedAt: 'åˆšåˆš'
+    };
+  }
+
+  crowdLevel(percent: number): string {
+    if (percent <= 45) {
+      return 'ç•…é€š';
+    }
+    if (percent <= 70) {
+      return 'é€‚ä¸­';
+    }
+    if (percent <= 85) {
+      return 'æ‹¥æŒ¤';
+    }
+    return 'ä¸¥é‡æ‹¥æŒ¤';
+  }
+
+  heatColor(percent: number): string {
+    if (percent <= 45) {
+      return '#2E9B63';
+    }
+    if (percent <= 70) {
+      return '#D7A72E';
+    }
+    if (percent <= 85) {
+      return '#E57C32';
+    }
+    return '#D84A4A';
+  }
+
+  isHighCrowd(snapshot: CrowdSnapshot): boolean {
+    return snapshot.forecastPercent > 70;
+  }
+
+  generateItinerary(profile: ItineraryProfile, spots: ScenicSpot[], snapshots: CrowdSnapshot[]): ItineraryPlan {
+    const selectedSpotIds: string[] = [];
+    const avoidedSpotNames: string[] = [];
+    const targetStopCount = Math.min(spots.length, Math.max(2, Math.floor(profile.durationMinutes / 60)));
+    let elapsedMinutes = 0;
+    let currentX = 31;
+    let currentY = 49;
+
+    for (let round = 0; round < targetStopCount; round++) {
+      let candidate = this.findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, false);
+      if (candidate === undefined) {
+        candidate = this.findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, true);
+      }
+      if (candidate === undefined) {
+        break;
+      }
+      const travelMinutes = this.estimatedWalkMinutes(currentX, currentY, candidate.x, candidate.y);
+      selectedSpotIds.push(candidate.id);
+      elapsedMinutes = elapsedMinutes + travelMinutes + candidate.stayMinutes;
+      currentX = candidate.x;
+      currentY = candidate.y;
+    }
+
+    for (let index = 0; index < spots.length; index++) {
+      const snapshot = this.crowdForSpot(spots[index], snapshots);
+      if (this.isHighCrowd(snapshot) && this.interestMatchCount(spots[index], profile.interestTags) > 0) {
+        avoidedSpotNames.push(spots[index].name);
+      }
+    }
+
+    const comfortScore = this.comfortScore(selectedSpotIds, spots, snapshots);
+    const savedWaitMinutes = avoidedSpotNames.length * 18;
+    const explanation = avoidedSpotNames.length > 0
+      ? `å·²é¿å¼€ ${avoidedSpotNames.join('ã€')} çš„é¢„æµ‹é«˜å³°ï¼Œä¼˜å…ˆå®‰æ’åŒç±»ä½çƒ­åº¦æ™¯ç‚¹ã€‚`
+      : 'å½“å‰å®¢æµå¹³ç¨³ï¼Œå·²æŒ‰å…´è¶£ã€æ­¥è¡Œè·ç¦»ä¸æ¸¸ç©æ—¶é—´ç”Ÿæˆèˆ’é€‚è·¯çº¿ã€‚';
+    return {
+      id: `itinerary-${Date.now()}`,
+      title: `${profile.durationMinutes / 60} å°æ—¶${profile.interestTags.join('Â·')}é”™å³°è¡Œç¨‹`,
+      spotIds: selectedSpotIds,
+      durationMinutes: elapsedMinutes,
+      comfortScore: comfortScore,
+      avoidedSpotNames: avoidedSpotNames,
+      savedWaitMinutes: savedWaitMinutes,
+      explanation: explanation,
+      generatedAt: 'åˆšåˆš'
+    };
+  }
+
+  replanItinerary(
+    plan: ItineraryPlan,
+    completedCount: number,
+    profile: ItineraryProfile,
+    spots: ScenicSpot[],
+    snapshots: CrowdSnapshot[]
+  ): ItineraryReplanResult {
+    const nextSpotIds: string[] = [];
+    const replacedNames: string[] = [];
+    for (let index = 0; index < plan.spotIds.length; index++) {
+      const spotId = plan.spotIds[index];
+      const spot = this.findSpot(spots, spotId);
+      if (spot === undefined || index < completedCount || !this.isHighCrowd(this.crowdForSpot(spot, snapshots))) {
+        nextSpotIds.push(spotId);
+        continue;
+      }
+      const alternative = this.findAlternative(profile, spots, snapshots, nextSpotIds, plan.spotIds, spotId);
+      if (alternative === undefined) {
+        nextSpotIds.push(spotId);
+        continue;
+      }
+      nextSpotIds.push(alternative.id);
+      replacedNames.push(`${spot.name} â†’ ${alternative.name}`);
+    }
+
+    if (replacedNames.length === 0) {
+      return { plan: plan, changed: false, reason: 'æœªå‘ç°éœ€è¦ç»•è¡Œçš„æœªåˆ°è¾¾æ™¯ç‚¹ã€‚' };
+    }
+    const reason = `é¢„æµ‹é«˜å³°è§¦å‘ç»•è¡Œï¼š${replacedNames.join('ï¼›')}ã€‚`;
+    const replanned: ItineraryPlan = {
+      id: plan.id,
+      title: plan.title,
+      spotIds: nextSpotIds,
+      durationMinutes: plan.durationMinutes,
+      comfortScore: this.comfortScore(nextSpotIds, spots, snapshots),
+      avoidedSpotNames: plan.avoidedSpotNames,
+      savedWaitMinutes: plan.savedWaitMinutes + replacedNames.length * 18,
+      explanation: reason,
+      generatedAt: 'åˆšåˆš'
+    };
+    return { plan: replanned, changed: true, reason: reason };
+  }
+
+  private findBestCandidate(
+    profile: ItineraryProfile,
+    spots: ScenicSpot[],
+    snapshots: CrowdSnapshot[],
+    selectedSpotIds: string[],
+    currentX: number,
+    currentY: number,
+    elapsedMinutes: number,
+    allowHighCrowd: boolean
+  ): ScenicSpot | undefined {
+    let best: ScenicSpot | undefined = undefined;
+    let bestScore = -100000;
+    for (let index = 0; index < spots.length; index++) {
+      const spot = spots[index];
+      if (this.containsSpotId(selectedSpotIds, spot.id)) {
+        continue;
+      }
+      const snapshot = this.crowdForSpot(spot, snapshots);
+      if (!allowHighCrowd && this.isHighCrowd(snapshot)) {
+        continue;
+      }
+      const walkMinutes = this.estimatedWalkMinutes(currentX, currentY, spot.x, spot.y);
+      if (elapsedMinutes + walkMinutes + spot.stayMinutes > profile.durationMinutes) {
+        continue;
+      }
+      const score = this.interestMatchCount(spot, profile.interestTags) * 100 + (100 - snapshot.forecastPercent) - walkMinutes * 3;
+      if (score > bestScore) {
+        best = spot;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  private findAlternative(
+    profile: ItineraryProfile,
+    spots: ScenicSpot[],
+    snapshots: CrowdSnapshot[],
+    completedSpotIds: string[],
+    originalSpotIds: string[],
+    replacingSpotId: string
+  ): ScenicSpot | undefined {
+    let best: ScenicSpot | undefined = undefined;
+    let bestScore = -100000;
+    for (let index = 0; index < spots.length; index++) {
+      const spot = spots[index];
+      if (spot.id === replacingSpotId || this.containsSpotId(completedSpotIds, spot.id) || this.containsSpotId(originalSpotIds, spot.id)) {
+        continue;
+      }
+      const snapshot = this.crowdForSpot(spot, snapshots);
+      if (this.isHighCrowd(snapshot)) {
+        continue;
+      }
+      const score = this.interestMatchCount(spot, profile.interestTags) * 100 + (100 - snapshot.forecastPercent);
+      if (score > bestScore) {
+        best = spot;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  private estimatedWalkMinutes(fromX: number, fromY: number, toX: number, toY: number): number {
+    return Math.max(8, Math.ceil((Math.abs(fromX - toX) + Math.abs(fromY - toY)) / 4));
+  }
+
+  private comfortScore(spotIds: string[], spots: ScenicSpot[], snapshots: CrowdSnapshot[]): number {
+    if (spotIds.length === 0) {
+      return 0;
+    }
+    let total = 0;
+    for (let index = 0; index < spotIds.length; index++) {
+      const spot = this.findSpot(spots, spotIds[index]);
+      if (spot !== undefined) {
+        total = total + (100 - this.crowdForSpot(spot, snapshots).forecastPercent);
+      }
+    }
+    return Math.round(total / spotIds.length);
+  }
+
+  private interestMatchCount(spot: ScenicSpot, interests: string[]): number {
+    let count = 0;
+    for (let tagIndex = 0; tagIndex < interests.length; tagIndex++) {
+      if (spot.interestTags.indexOf(interests[tagIndex]) >= 0) {
+        count = count + 1;
+      }
+    }
+    return count;
+  }
+
+  private containsSpotId(spotIds: string[], spotId: string): boolean {
+    return spotIds.indexOf(spotId) >= 0;
+  }
+
+  private findSpot(spots: ScenicSpot[], spotId: string): ScenicSpot | undefined {
+    for (let index = 0; index < spots.length; index++) {
+      if (spots[index].id === spotId) {
+        return spots[index];
+      }
+    }
+    return undefined;
+  }
+}
+ÀÔrE‘¸../data/ScenicRepositoryÔrF—ªassertions¨external¢id¤meta±moduleSideEffectsªresolvedByµsyntheticNamedExportsAÂÙFD:\Projects\ScenicNav\app\entry\src\main\ets\data\ScenicRepository.etsAÃªoh-resolveÂ“ÔrG–§version¤fileªsourceRoot§sources¥names¨mappings²ScenicViewModel.js ‘³ScenicViewModel.etsÜ ã˜”  	 ” 	”	 		” 	” 	”! 	!”; 	;”< 	<””   ” ” ” ‘”  —” ” ” *” .”. >”0 Ì@”1 ÌA’” Í ” Í”” ” ” ” ›” ” ” ” ” ”  ”! ”" ”# ”% !”& "’” ” ”” ” 	” 
+” ˜” ” ” ” ” ”" ”# ”$  ’” ” ”” ” ” ” #›” ” 
+” ” ” ” ”& "”' #”- )”/ +”0 ,Ü ” ” 	” ” ” ” ” ”! ”$  ”* &”+ '”1 -”3 /”8 4”: 6”< 8Ü ” ” 
+” ” ” ” ” ”" ”# ”* $”+ %”5 /”6 0”: 4”; 5”= 7—” ” ” ” ”# ”$ ”% ‘” ‘”	 —” ” ” ” ” ” ” ’” ” –”  ”  ”  ”  !”  #”1  ?–” !” !”  !”$ ! ”% !!”' !#”” "” "” "” "‘”	 #›” $” $” $” $” $” $”" $”% $!”9 $5”: $6”; $7’” %” %–” '” '” '” '” '!”  ';Ü ” (” (	” (” (” (” (” (”! (”$ ( ”- ()”. (*”4 (0”6 (2”; (7”= (9”? (;” )” )
+” )” )” )”  )”! )”' )!”, )&”0 )*”1 )+”3 )-”5 )/—” *” *”  *”! *”& *”' *”( * ‘” +‘”	 ,’” -” -–” .” .” .” .” .” .–” /” /” /”  /”! /”- /'–” 0” 0” 0”! 0”" 0”. 0(”” 1” 1” 1” 1”” 2” 2” 2” 2’”	 3”
+ 3’” 4” 4”” 6” 6” 6” 6–” 7” 7” 7” 7” 7” 7”” 8” 8” 8” 8‘”	 9–” :” :” :” :” :” :”” ;” ;” ;” ;‘”	 <–” =” =” =” =” =” =”” >” >” >” >‘”	 ?”” Ì@” Ì@” Ì@” Ì@’” ÌA” ÌA”” ÌC” ÌC” ÌC” ÌC–” ÌD” ÌD” ÌD” ÌD” ÌD” ÌD”” ÌE” ÌE” ÌE” ÌE‘”	 ÌF–” ÌG” ÌG” ÌG” ÌG” ÌG” ÌG”” ÌH” ÌH” ÌH” ÌH‘”	 ÌI–” ÌJ” ÌJ” ÌJ” ÌJ” ÌJ” ÌJ”” ÌK” ÌK” ÌK” ÌK‘”	 ÌL”” ÌM” ÌM” ÌM” ÌM’” ÌN” ÌN”” ÌP” ÌP” ÌP” ÌP%˜” ÌQ” ÌQ” ÌQ” ÌQ”' ÌQ#”* ÌQ&”, ÌQ(”- ÌQ)’” ÌR” ÌR˜” ÌT” ÌT” ÌT” ÌT-” ÌT/”$ ÌTÌB”& ÌTÌD”/ ÌTÌ^–” ÌU” ÌU
+” ÌU”  ÌU&”" ÌU(”# ÌU)–” ÌV” ÌV
+” ÌV”! ÌV'”# ÌV)”$ ÌV*Ü ” ÌW” ÌW
+” ÌW”  ÌW”$ ÌW ”% ÌW!”( ÌW$”) ÌW%”. ÌW*”/ ÌW+”5 ÌW1”7 ÌW3”; ÌW7”< ÌW8”? ÌW;”Ì@ ÌW<”ÌA ÌW=”ÌC ÌW?”ÌG ÌWÌC”ÌH ÌWÌD”ÌM ÌWÌI”ÌN ÌWÌJ”ÌU ÌWÌQ”ÌV ÌWÌR”Ìe ÌWÌa”Ìh ÌWÌd”Ìj ÌWÌf”Ìk ÌWÌg”Ìl ÌWÌh”Ìm ÌWÌi”Ìn ÌWÌj–” ÌX” ÌX” ÌX” ÌX” ÌX” ÌX–” ÌY” ÌY” ÌY” ÌY” ÌY” ÌY–” ÌZ” ÌZ” ÌZ” ÌZ” ÌZ” ÌZ” Ì\” Ì\	” Ì\” Ì\” Ì\” Ì\” Ì\”! Ì\”$ Ì\ ”3 Ì\/”5 Ì\1”: Ì\6”< Ì\8”> Ì\:Ü ” Ì]” Ì]
+” Ì]” Ì]”  Ì]”! Ì]”2 Ì],”3 Ì]-”: Ì]4”< Ì]6”ÌA Ì];”ÌC Ì]=”ÌL Ì]ÌF”ÌN Ì]ÌH”Ì] Ì]ÌW”Ì_ Ì]ÌY”Ìg Ì]Ìa”Ìi Ì]Ìc”Ìq Ì]Ìk”Ìs Ì]Ìm”Ì Ì]Ì{”Ìƒ Ì]Ì}”Ìˆ Ì]Ì‚”Ì‰ Ì]Ìƒ”ÌŠ Ì]Ì„–” Ì^” Ì^
+” Ì^” Ì^”' Ì^!”) Ì^#Ü ” Ì_” Ì_” Ì_”  Ì_”! Ì_”2 Ì_*”3 Ì_+”: Ì_2”< Ì_4”ÌA Ì_9”ÌC Ì_;”ÌL Ì_ÌD”ÌN Ì_ÌF”Ì] Ì_ÌU”Ì_ Ì_ÌW”Ìg Ì_Ì_”Ìi Ì_Ìa”Ìq Ì_Ìi”Ìs Ì_Ìk”Ì Ì_Ìy”Ìƒ Ì_Ì{”Ì‡ Ì_Ì”Ìˆ Ì_Ì€”Ì‰ Ì_Ì‘” Ì`–” Ìa” Ìa
+” Ìa” Ìa”' Ìa!”) Ìa#’” Ìb” Ìb‘” ÌcÜ ” Ìd” Ìd” Ìd”" Ìd”& Ìd ”' Ìd!”; Ìd5”< Ìd6”ÌD Ìd>”ÌF ÌdÌ@”ÌN ÌdÌH”ÌP ÌdÌJ”ÌY ÌdÌS”ÌZ ÌdÌT”Ì[ ÌdÌU”Ì] ÌdÌW”Ìf ÌdÌ`”Ìg ÌdÌa”Ìh ÌdÌb”Ìi ÌdÌc”Ìj ÌdÌdš” Ìe” Ìe” Ìe”  Ìe”! Ìe”* Ìe$”+ Ìe%”- Ìe'”. Ìe(”/ Ìe)›” Ìf” Ìf” Ìf”+ Ìf%”. Ìf(”; Ìf5”> Ìf8”ÌG ÌfÌA”ÌH ÌfÌB”ÌS ÌfÌM”ÌT ÌfÌN—” Ìg” Ìg” Ìg”  Ìg”! Ìg”" Ìg”# Ìg—” Ìh” Ìh” Ìh”  Ìh”! Ìh”" Ìh”# Ìh‘”	 ÌiÜ ” Ìk” Ìk	” Ìk” Ìk” Ìk” Ìk” Ìk”! Ìk”$ Ìk ”) Ìk%”* Ìk&”0 Ìk,”2 Ìk.”7 Ìk3”9 Ìk5”; Ìk7Ü ” Ìl” Ìl” Ìl” Ìl”! Ìl”" Ìl”. Ìl(”/ Ìl)”4 Ìl.”5 Ìl/”: Ìl4”; Ìl5”= Ìl7”ÌF ÌlÌ@”ÌG ÌlÌA”ÌH ÌlÌBÜ ” Ìm” Ìm
+” Ìm” Ìm”  Ìm”! Ìm”) Ìm#”* Ìm$”. Ìm(”2 Ìm,”3 Ìm-”ÌE Ìm?”ÌF ÌmÌ@”ÌK ÌmÌE”ÌL ÌmÌF”ÌQ ÌmÌK”ÌR ÌmÌL”ÌT ÌmÌN”Ì[ ÌmÌU”Ì\ ÌmÌV”Ìh ÌmÌb”Ìi ÌmÌc”Ìl ÌmÌf”Ìm ÌmÌg”Ìo ÌmÌi” Ìn”  Ìn”! Ìn”% Ìn”& Ìn”+ Ìn#”, Ìn$”1 Ìn)”2 Ìn*”3 Ìn+”7 Ìn/”8 Ìn0”9 Ìn1‘” Ìo‘”	 ÌpŸ” Ìr” Ìr
+” Ìr” Ìr”! Ìr”" Ìr”. Ìr*”/ Ìr+”> Ìr:”Ì@ Ìr<”ÌE ÌrÌA”ÌG ÌrÌC”ÌP ÌrÌL”ÌQ ÌrÌM”ÌR ÌrÌNš” Ìs” Ìs
+” Ìs”! Ìs”1 Ìs-”2 Ìs.”8 Ìs4”; Ìs7”= Ìs9”> Ìs:™” Ìt” Ìt
+” Ìt” Ìt”, Ìt(”- Ìt)”3 Ìt/”6 Ìt2”7 Ìt3›” Ìu” Ìu” Ìu” Ìu”% Ìu”& Ìu ”* Ìu$”+ Ìu%”. Ìu(”/ Ìu)”ÌD Ìu>•” Ìv” Ìv” Ìv”, Ìv&”- Ìv'’” Ìw” Ìw™” Ìx” Ìx” Ìx
+” Ìx”! Ìx”" Ìx”% Ìx”' Ìx!”) Ìx#Ü ” Ìy” Ìy” Ìy” Ìy” Ìy” Ìy”- Ìy'”0 Ìy*”2 Ìy,”8 Ìy2”? Ìy9”Ì@ Ìy:”ÌL ÌyÌF”ÌM ÌyÌG”ÌQ ÌyÌK”ÌR ÌyÌL”ÌU ÌyÌO”ÌV ÌyÌP”Ì\ ÌyÌV”” Ìz” Ìz” Ìz”$ Ìz”” Ì{” Ì{” Ì{”+ Ì{%”” Ì|” Ì|” Ì|”& Ì| ”” Ì}” Ì}” Ì}”. Ì}(”” Ì~” Ì~” Ì~”. Ì~(”” Ì” Ì” Ì”$ Ì”” Ì€” Ì€” Ì€” Ì€’”	 Ì”
+ Ì’” Ì‚” Ì‚œ” Ì„” Ì„” Ì…” Ì…” Ì†”( Ì†”* Ì‡”1 Ì‡”3 Ìˆ”8 Ìˆ”: Ì‰”ÌC Ì‰–” Ì‹” Ì‹
+” Ì‹” Ì‹"” Ì‹$” Ì‹%–” ÌŒ” ÌŒ
+” ÌŒ” ÌŒ$”  ÌŒ&”! ÌŒ'Ü ” Ì” Ì	” Ì” Ì” Ì” Ì” Ì”! Ì”$ Ì ”( Ì$”) Ì%”0 Ì,”1 Ì-”7 Ì3”9 Ì5”> Ì:”Ì@ Ì<”ÌB Ì>›” Ì” Ì” Ì” Ì” Ì”  Ì”' Ì!”( Ì"”- Ì'”. Ì(”/ Ì)” Ì” Ì” Ì” Ì” Ì” Ì”& Ì ”' Ì!”, Ì&”. Ì(”4 Ì.”5 Ì/”6 Ì0Ü ” Ì” Ì
+” Ì” Ì”" Ì”& Ì ”+ Ì%”. Ì(”< Ì6”Ì@ Ì:”ÌA Ì;”ÌE Ì?”ÌF ÌÌ@”ÌQ ÌÌK”ÌR ÌÌL”ÌV ÌÌP”ÌW ÌÌQ”Ìc ÌÌ]”Ìd ÌÌ^”Ìh ÌÌb”Ìj ÌÌd”Ìs ÌÌm”Ìt ÌÌn”Ìu ÌÌo”Ìw ÌÌq˜” Ì‘” Ì‘” Ì‘”  Ì‘”! Ì‘”' Ì‘”( Ì‘ ”) Ì‘!’” Ì’” Ì’‘” Ì“Ü ” Ì”” Ì”” Ì””  Ì””$ Ì””% Ì””4 Ì”.”5 Ì”/”< Ì”6”> Ì”8”ÌC Ì”=”ÌE Ì”?”ÌN Ì”ÌH”ÌP Ì”ÌJ”Ì[ Ì”ÌU”Ì] Ì”ÌW”Ìa Ì”Ì[”Ìb Ì”Ì\”Ìi Ì”Ìc”Ìk Ì”Ìe”Ìq Ì”Ìk”Ìr Ì”Ìl”Ìs Ì”Ìm–” Ì•” Ì•
+” Ì•”  Ì•”) Ì•#”+ Ì•%˜” Ì–” Ì–” Ì–”  Ì–”! Ì–”' Ì–”( Ì– ”) Ì–!’” Ì—” Ì—‘” Ì˜š” Ì™” Ì™” Ì™” Ì™” Ì™”( Ì™"”) Ì™#”+ Ì™%”, Ì™&”- Ì™'Ü ” Ìš” Ìš” Ìš” Ìš” Ìš”" Ìš”& Ìš ”' Ìš!”+ Ìš%”1 Ìš+”< Ìš6”= Ìš7”ÌA Ìš;”ÌC Ìš=”ÌD Ìš>”ÌE Ìš?‘”	 Ì›˜” Ì” Ì” Ì” Ì”  Ì”% Ì!”& Ì"”( Ì$Ü ” Ì” Ì” Ì” Ì” Ì” Ì”! Ì”( Ì"”* Ì$”/ Ì)”1 Ì+”7 Ì1”9 Ì3”ÌI ÌÌC”ÌK ÌÌE”ÌL ÌÌF‘”	 ÌŸ” Ì ” Ì 
+” Ì ” Ì ”# Ì ”0 Ì ,”1 Ì -”5 Ì 1”6 Ì 2”9 Ì 5”: Ì 6”= Ì 9”> Ì :”” Ì¡” Ì¡
+” Ì¡” Ì¡%–” Ì¢” Ì¢” Ì¢
+” Ì¢” Ì¢” Ì¢–” Ì£” Ì£” Ì£” Ì£” Ì£” Ì£”” Ì¤” Ì¤” Ì¤”  Ì¤–” Ì¥” Ì¥” Ì¥”! Ì¥”" Ì¥”1 Ì¥+” Ì¦” Ì¦” Ì¦” Ì¦” Ì¦”+ Ì¦%”, Ì¦&”7 Ì¦1”9 Ì¦3”> Ì¦8”Ì@ Ì¦:”ÌI Ì¦ÌC”ÌJ Ì¦ÌD–” Ì§” Ì§” Ì§”" Ì§”# Ì§”3 Ì§-œ” Ì¨” Ì¨” Ì¨”" Ì¨”# Ì¨”3 Ì¨-”6 Ì¨0”ÌC Ì¨=”ÌD Ì¨>”ÌJ Ì¨ÌD”ÌM Ì¨ÌG”ÌO Ì¨ÌI”” Ì©” Ì©” Ì©” Ì©”” Ìª” Ìª” Ìª” Ìª’”	 Ì«”
+ Ì«Ü ” Ì¬” Ì¬” Ì¬” Ì¬” Ì¬”  Ì¬”" Ì¬”) Ì¬%”+ Ì¬'”/ Ì¬+”1 Ì¬-”7 Ì¬3”9 Ì¬5”? Ì¬;”ÌA Ì¬=”ÌB Ì¬>’” Ì­” Ì­Ü ” Ì¯
+” Ì¯” Ì°” Ì°” Ì±”$ Ì±”& Ì²”/ Ì²”1 Ì³”Ì@ Ì³”ÌB Ì´”ÌJ Ì´”ÌL Ìµ”ÌT Ìµ”ÌV Ì¶”Ìd Ì¶”Ìf Ì·”Ìt Ì·–” Ì¹” Ì¹” Ì¹” Ì¹'” Ì¹0” Ì¹1—” Ìº” Ìº” Ìº” Ìº” Ìº” Ìº”  ÌºÜ ” Ì»” Ì»	” Ì»” Ì»” Ì»” Ì»” Ì»”! Ì»”$ Ì» ”) Ì»%”* Ì»&”0 Ì»,”2 Ì».”7 Ì»3”9 Ì»5”; Ì»7™” Ì¼” Ì¼” Ì¼” Ì¼” Ì¼” Ì¼”$ Ì¼”% Ì¼”& Ì¼ ” Ì½” Ì½
+” Ì½” Ì½”# Ì½”$ Ì½”3 Ì½-”5 Ì½/”9 Ì½3”: Ì½4”< Ì½6”= Ì½7”? Ì½9’” Ì¾” Ì¾‘” Ì¿” ÌÀ” ÌÀ” ÌÀ” ÌÀ”! ÌÀ”" ÌÀ”. ÌÀ(”/ ÌÀ)”3 ÌÀ-”5 ÌÀ/”> ÌÀ8”? ÌÀ9”Ì@ ÌÀ:œ” ÌÁ” ÌÁ
+” ÌÁ” ÌÁ”# ÌÁ”' ÌÁ!”( ÌÁ"”3 ÌÁ-”4 ÌÁ.”< ÌÁ6”= ÌÁ7”? ÌÁ9’” ÌÂ” ÌÂ‘” ÌÃÜ ” ÌÄ” ÌÄ” ÌÄ”  ÌÄ”$ ÌÄ”% ÌÄ”9 ÌÄ3”: ÌÄ4”ÌB ÌÄ<”ÌD ÌÄ>”ÌL ÌÄÌF”ÌN ÌÄÌH”ÌR ÌÄÌL”ÌS ÌÄÌM”ÌT ÌÄÌN”ÌV ÌÄÌP”ÌZ ÌÄÌT”Ì[ ÌÄÌU”Ì\ ÌÄÌV”Ì] ÌÄÌW”Ì^ ÌÄÌX” ÌÅ” ÌÅ
+” ÌÅ”! ÌÅ”, ÌÅ&”/ ÌÅ)”3 ÌÅ-”4 ÌÅ.”? ÌÅ9”ÌB ÌÅ<”ÌI ÌÅÌC”ÌJ ÌÅÌD”ÌY ÌÅÌS”Ì[ ÌÅÌU’” ÌÆ” ÌÆ‘” ÌÇÜ ” ÌÈ” ÌÈ” ÌÈ” ÌÈ” ÌÈ” ÌÈ”1 ÌÈ+”2 ÌÈ,”6 ÌÈ0”8 ÌÈ2”? ÌÈ9”Ì@ ÌÈ:”ÌL ÌÈÌF”ÌM ÌÈÌG”ÌP ÌÈÌJ”ÌS ÌÈÌM”ÌV ÌÈÌP”ÌW ÌÈÌQ”ÌZ ÌÈÌT”Ì] ÌÈÌW”Ìe ÌÈÌ_”Ìf ÌÈÌ`”Ìu ÌÈÌo”Ìv ÌÈÌp”Ìy ÌÈÌs”Ì„ ÌÈÌ~”Ì‡ ÌÈÌ”Ìˆ ÌÈÌ‚”Ì‰ ÌÈÌƒ–” ÌÉ” ÌÉ
+” ÌÉ” ÌÉ”! ÌÉ”# ÌÉ•” ÌÊ” ÌÊ” ÌÊ” ÌÊ” ÌÊ•” ÌË” ÌË” ÌË”! ÌË”" ÌË‘” ÌÌ‘”	 ÌÍ”” ÌÎ” ÌÎ” ÌÎ” ÌÎ’” ÌÏ” ÌÏ” ÌÑ
+” ÌÑ” ÌÒ” ÌÒ” ÌÓ”" ÌÓ”$ ÌÔ”- ÌÔ”/ ÌÕ”? ÌÕ”ÌA ÌÖ”ÌP ÌÖ”ÌR Ì×”Ìa Ì×–” ÌÙ” ÌÙ” ÌÙ” ÌÙ'” ÌÙ0” ÌÙ1—” ÌÚ” ÌÚ” ÌÚ” ÌÚ” ÌÚ” ÌÚ”  ÌÚÜ ” ÌÛ” ÌÛ	” ÌÛ” ÌÛ” ÌÛ” ÌÛ” ÌÛ”! ÌÛ”$ ÌÛ ”) ÌÛ%”* ÌÛ&”0 ÌÛ,”2 ÌÛ.”7 ÌÛ3”9 ÌÛ5”; ÌÛ7™” ÌÜ” ÌÜ” ÌÜ” ÌÜ” ÌÜ” ÌÜ”$ ÌÜ”% ÌÜ”& ÌÜ Ü ” Ìİ” Ìİ
+” Ìİ” Ìİ” Ìİ” Ìİ”+ Ìİ%”/ Ìİ)”3 Ìİ-”4 Ìİ.”ÌB Ìİ<”ÌC Ìİ=”ÌS ÌİÌM”ÌU ÌİÌO”ÌY ÌİÌS”ÌZ ÌİÌT”Ì\ ÌİÌV”Ì] ÌİÌW”Ìa ÌİÌ[”Ìe ÌİÌ_”Ìf ÌİÌ`”Ìt ÌİÌn”Ìu ÌİÌo”Ì„ ÌİÌ~”Ì† ÌİÌ€”ÌŠ ÌİÌ„”Ì‹ ÌİÌ…”Ì ÌİÌ‡”Ì ÌİÌˆ”Ì ÌİÌŠ’” ÌŞ” ÌŞ‘” Ìß” Ìà” Ìà” Ìà” Ìà”! Ìà”" Ìà”. Ìà(”/ Ìà)”3 Ìà-”5 Ìà/”> Ìà8”? Ìà9”Ì@ Ìà:™” Ìá” Ìá
+” Ìá” Ìá”  Ìá”! Ìá”) Ìá#”* Ìá$”, Ìá&’” Ìâ” Ìâ‘” ÌãÜ ” Ìä” Ìä” Ìä” Ìä” Ìä” Ìä”1 Ìä+”2 Ìä,”6 Ìä0”8 Ìä2”? Ìä9”Ì@ Ìä:”ÌL ÌäÌF”ÌM ÌäÌG”ÌP ÌäÌJ”ÌS ÌäÌM”ÌV ÌäÌP”ÌW ÌäÌQ”ÌZ ÌäÌT”Ì] ÌäÌW”Ìe ÌäÌ_”Ìf ÌäÌ`”Ìu ÌäÌo”Ìv ÌäÌp”Ìw ÌäÌq–” Ìå” Ìå
+” Ìå” Ìå”! Ìå”# Ìå•” Ìæ” Ìæ” Ìæ” Ìæ” Ìæ•” Ìç” Ìç” Ìç”! Ìç”" Ìç‘” Ìè‘”	 Ìé”” Ìê” Ìê” Ìê” Ìê’” Ìë” Ìëš” Ìí
+” Ìí” Ìí” Ìí,”  Ìí.”% Ìí;”' Ìí=”* ÌíÌH”, ÌíÌJ”/ ÌíÌUÜ $” Ìî” Ìî” Ìî” Ìî” Ìî” Ìî” Ìî” Ìî” Ìî”  Ìî”$ Ìî ”% Ìî!”& Ìî"”* Ìî&”+ Ìî'”. Ìî*”/ Ìî+”4 Ìî0”7 Ìî3”: Ìî6”; Ìî7”> Ìî:”ÌB Ìî>”ÌC Ìî?”ÌF ÌîÌB”ÌG ÌîÌC”ÌL ÌîÌH”ÌO ÌîÌK”ÌR ÌîÌN”ÌS ÌîÌO”ÌT ÌîÌP”ÌW ÌîÌS”ÌX ÌîÌT”ÌY ÌîÌU”ÌZ ÌîÌV”Ì[ ÌîÌW’” Ìï” Ìï˜” Ìñ
+” Ìñ” Ìñ” Ìñ(” Ìñ*” Ìñ=”! Ìñ?”* ÌñÌY˜” Ìò” Ìò” Ìò” Ìò” Ìò” Ìò”  Ìò”" Ìò”” Ìó” Ìó” Ìó” Ìó‘”	 Ìô–” Ìõ” Ìõ” Ìõ” Ìõ” Ìõ” ÌõÜ ” Ìö” Ìö	” Ìö” Ìö” Ìö” Ìö” Ìö”! Ìö”$ Ìö ”+ Ìö'”, Ìö(”2 Ìö.”4 Ìö0”9 Ìö5”; Ìö7”= Ìö9Ü ” Ì÷” Ì÷” Ì÷” Ì÷” Ì÷” Ì÷”& Ì÷ ”' Ì÷!”, Ì÷&”. Ì÷(”5 Ì÷/”6 Ì÷0”; Ì÷5”< Ì÷6”= Ì÷7”> Ì÷8–” Ìø” Ìø
+” Ìø” Ìø”" Ìø”$ ÌøÜ ” Ìù” Ìù” Ìù” Ìù”  Ìù”! Ìù”$ Ìù”' Ìù”+ Ìù#”, Ìù$”8 Ìù0”9 Ìù1”= Ìù5”? Ìù7”ÌH ÌùÌ@”ÌI ÌùÌA”ÌJ ÌùÌB”ÌY ÌùÌQ”ÌZ ÌùÌR”Ì[ ÌùÌS‘” Ìú‘”	 Ìû” Ìü” Ìü” Ìü” Ìü” Ìü” Ìü” Ìü”" Ìü”) Ìü%”* Ìü&”0 Ìü,”1 Ìü-”2 Ìü.’” Ìı” Ìı–” Ìÿ
+” Ìÿ” Ìÿ” Ìÿ-” Ìÿ/”& ÌÿÌB–” Í ” Í ” Í ” Í ” Í ” Í Ü ” Í” Í	” Í” Í” Í” Í” Í”' Í#”* Í&”3 Í/”4 Í0”: Í6”< Í8”ÌD ÍÌ@”ÌF ÍÌB”ÌH ÍÌDÜ ” Í” Í
+” Í” Í”! Í”" Í”) Í#”* Í$”3 Í-”4 Í.”< Í6”= Í7”> Í8”ÌB Í<”ÌC Í=”ÌE Í?—” Í” Í” Í” Í”  Í”! Í”" Í‘” Í‘”	 Í”” Í” Í” Í” Í’” Í” Í–” Í	
+” Í	” Í	” Í	*” Í	,”" Í	:›” Í
+” Í
+” Í
+” Í
+” Í
+” Í
+”% Í
+!”& Í
+"”* Í
+&”+ Í
+'”, Í
+(’” Í” Í–” Í
+” Í” Í” Í&” Í(” Í6Ü ” Í” Í	” Í” Í” Í” Í” Í”! Í”$ Í ”) Í%”* Í&”0 Í,”2 Í.”7 Í3”9 Í5”; Í7›” Í” Í
+” Í” Í” Í” Í” Í” Í”$ Í”* Í$”, Í&—” Í” Í” Í” Í”" Í”# Í”$ Í‘” Í‘”	 Í”” Í” Í” Í” Í’” Í” Í‘” ÍÔrH–§version¤file§sources®sourcesContent¥names¨mappingsÀ‘À‘ÀÜ ä‘”    ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”  	 ‘”  
+ ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”   ‘”    ‘”  ! ‘”  " ‘”  # ‘”  $ ‘”  % ‘”  & ‘”  ' ‘”  ( ‘”  ) ‘”  * ‘”  + ‘”  , ‘”  - ‘”  . ‘”  / ‘”  0 ‘”  1 ‘”  2 ‘”  3 ‘”  4 ‘”  5 ‘”  6 ‘”  7 ‘”  8 ‘”  9 ‘”  : ‘”  ; ‘”  < ‘”  = ‘”  > ‘”  ? ‘”  Ì@ ‘”  ÌA ‘”  ÌB ‘”  ÌC ‘”  ÌD ‘”  ÌE ‘”  ÌF ‘”  ÌG ‘”  ÌH ‘”  ÌI ‘”  ÌJ ‘”  ÌK ‘”  ÌL ‘”  ÌM ‘”  ÌN ‘”  ÌO ‘”  ÌP ‘”  ÌQ ‘”  ÌR ‘”  ÌS ‘”  ÌT ‘”  ÌU ‘”  ÌV ‘”  ÌW ‘”  ÌX ‘”  ÌY ‘”  ÌZ ‘”  Ì[ ‘”  Ì\ ‘”  Ì] ‘”  Ì^ ‘”  Ì_ ‘”  Ì` ‘”  Ìa ‘”  Ìb ‘”  Ìc ‘”  Ìd ‘”  Ìe ‘”  Ìf ‘”  Ìg ‘”  Ìh ‘”  Ìi ‘”  Ìj ‘”  Ìk ‘”  Ìl ‘”  Ìm ‘”  Ìn ‘”  Ìo ‘”  Ìp ‘”  Ìq ‘”  Ìr ‘”  Ìs ‘”  Ìt ‘”  Ìu ‘”  Ìv ‘”  Ìw ‘”  Ìx ‘”  Ìy ‘”  Ìz ‘”  Ì{ ‘”  Ì| ‘”  Ì} ‘”  Ì~ ‘”  Ì ‘”  Ì€ ‘”  Ì ‘”  Ì‚ ‘”  Ìƒ ‘”  Ì„ ‘”  Ì… ‘”  Ì† ‘”  Ì‡ ‘”  Ìˆ ‘”  Ì‰ ‘”  ÌŠ ‘”  Ì‹ ‘”  ÌŒ ‘”  Ì ‘”  Ì ‘”  Ì ‘”  Ì ‘”  Ì‘ ‘”  Ì’ ‘”  Ì“ ‘”  Ì” ‘”  Ì• ‘”  Ì– ‘”  Ì— ‘”  Ì˜ ‘”  Ì™ ‘”  Ìš ‘”  Ì› ‘”  Ìœ ‘”  Ì ‘”  Ì ‘”  ÌŸ ‘”  Ì  ‘”  Ì¡ ‘”  Ì¢ ‘”  Ì£ ‘”  Ì¤ ‘”  Ì¥ ‘”  Ì¦ ‘”  Ì§ ‘”  Ì¨ ‘”  Ì© ‘”  Ìª ‘”  Ì« ‘”  Ì¬ ‘”  Ì­ ‘”  Ì® ‘”  Ì¯ ‘”  Ì° ‘”  Ì± ‘”  Ì² ‘”  Ì³ ‘”  Ì´ ‘”  Ìµ ‘”  Ì¶ ‘”  Ì· ‘”  Ì¸ ‘”  Ì¹ ‘”  Ìº ‘”  Ì» ‘”  Ì¼ ‘”  Ì½ ‘”  Ì¾ ‘”  Ì¿ ‘”  ÌÀ ‘”  ÌÁ ‘”  ÌÂ ‘”  ÌÃ ‘”  ÌÄ ‘”  ÌÅ ‘”  ÌÆ ‘”  ÌÇ ‘”  ÌÈ ‘”  ÌÉ ‘”  ÌÊ ‘”  ÌË ‘”  ÌÌ ‘”  ÌÍ ‘”  ÌÎ ‘”  ÌÏ ‘”  ÌĞ ‘”  ÌÑ ‘”  ÌÒ ‘”  ÌÓ ‘”  ÌÔ ‘”  ÌÕ ‘”  ÌÖ ‘”  Ì× ‘”  ÌØ ‘”  ÌÙ ‘”  ÌÚ ‘”  ÌÛ ‘”  ÌÜ ‘”  Ìİ ‘”  ÌŞ ‘”  Ìß ‘”  Ìà ‘”  Ìá ‘”  Ìâ ‘”  Ìã ÔrI’§missing¦pluginÃ¦genAbcÂÔ  ÔrJ”²dynamicImportCache¹exportAllDeclarationCache»exportNamedDeclarationCache«importCache‘ÔrK–¤type¥start£end«declarationªspecifiers¦source¶ExportNamedDeclaration>Í#aÔrL–¤type¥start£end¢idªsuperClass¤body°ClassDeclarationÌEÍ#aÔrM”¤type¥start£end¤nameªIdentifierÌKÌZ¯ScenicViewModelÀÔrN”¤type¥start£end¤body©ClassBodyÌ[Í#aÜ ÔrO˜¤type¥start£end¦static¨computed£key¤kind¥value°MethodDefinitionÌbÌ«ÂÂMªIdentifierÌbÌm«constructor«constructorÔrP™¤type¥start£end¢idªexpression©generator¥async¦params¤body²FunctionExpressionÌmÌ«ÀÂÂÂN®BlockStatementÌpÌ«‘ÔrQ”¤type¥start£endªexpression³ExpressionStatementÌ{Ì¤ÔrR–¤type¥start£end¨operator¤left¥right´AssignmentExpressionÌ{Ì£¡=ÔrS—¤type¥start£end¦object¨property¨computed¨optional°MemberExpressionÌ{ÌŠÔrT“¤type¥start£end®ThisExpressionÌ{ÌMªIdentifierÌ€ÌŠªrepositoryÂÂÔrU•¤type¥start£end¦callee©arguments­NewExpressionÌÌ£MªIdentifierÌ‘Ì¡°ScenicRepositoryO°MethodDefinitionÌ±ÌôÂÂMªIdentifierÌ±Ì¼«formatPrice¦methodP²FunctionExpressionÌ¼ÌôÀÂÂÂ‘MªIdentifierÌ½ÌÂ¥priceN®BlockStatementÌÄÌô‘ÔrV”¤type¥start£end¨argument¯ReturnStatementÌÏÌíÔrW•¤type¥start£end«expressions¦quasis¯TemplateLiteralÌÖÌì‘ÔrX–¤type¥start£end¦callee©arguments¨optional®CallExpressionÌÚÌêS°MemberExpressionÌÚÌçMªIdentifierÌÚÌß¥priceMªIdentifierÌàÌç§toFixedÂÂ‘ÔrY•¤type¥start£end¥value£raw§LiteralÌèÌé¡2Â’ÔrZ•¤type¥start£end¥value¤tail¯TemplateElementÌ×ÌØÔr[’£raw¦cooked£ï¿¥£ï¿¥ÂZ¯TemplateElementÌëÌë[  ÃO°MethodDefinitionÌúÍ8ÂÂMªIdentifierÌúÍ§canBook¦methodP²FunctionExpressionÍÍ8ÀÂÂÂ‘MªIdentifierÍÍ¦ticketN®BlockStatementÍ
+Í8‘V¯ReturnStatementÍÍ1Ôr\–¤type¥start£end¤left¨operator¥right°BinaryExpressionÍÍ0S°MemberExpressionÍÍ,MªIdentifierÍÍ"¦ticketMªIdentifierÍ#Í,©remainingÂÂ¡>Y§LiteralÍ/Í0 ¡0O°MethodDefinitionÍ>ÍnÂÂMªIdentifierÍ>ÍL®recommendRoute¦methodP²FunctionExpressionÍLÍnÀÂÂÂ‘MªIdentifierÍMÍWªpreferenceN®BlockStatementÍYÍn“Ôr]•¤type¥start£end¬declarations¤kind³VariableDeclarationÍdÍŒ‘Ôr^•¤type¥start£end¢id¤init²VariableDeclaratorÍjÍ‹MªIdentifierÍjÍp¦routesX®CallExpressionÍsÍ‹S°MemberExpressionÍsÍ‰S°MemberExpressionÍsÍ‚T®ThisExpressionÍsÍwMªIdentifierÍxÍ‚ªrepositoryÂÂMªIdentifierÍƒÍ‰¦routesÂÂÂ¥constÔr_—¤type¥start£end¤init¤test¦update¤body¬ForStatementÍ–ÍL]³VariableDeclarationÍ›Í¨‘^²VariableDeclaratorÍŸÍ¨MªIdentifierÍŸÍ¤¥indexY§LiteralÍ§Í¨ ¡0£let\°BinaryExpressionÍªÍ¿MªIdentifierÍªÍ¯¥index¡<S°MemberExpressionÍ²Í¿MªIdentifierÍ²Í¸¦routesMªIdentifierÍ¹Í¿¦lengthÂÂÔr`–¤type¥start£end¨operator¦prefix¨argument°UpdateExpressionÍÁÍÈ¢++ÂMªIdentifierÍÁÍÆ¥indexN®BlockStatementÍÊÍL‘Ôra–¤type¥start£end¤testªconsequent©alternate«IfStatementÍÙÍA\°BinaryExpressionÍİÍX®CallExpressionÍİÍS°MemberExpressionÍİÍ÷S°MemberExpressionÍİÍïS°MemberExpressionÍİÍêMªIdentifierÍİÍã¦routesMªIdentifierÍäÍé¥indexÃÂMªIdentifierÍëÍï¤tagsÂÂMªIdentifierÍğÍ÷§indexOfÂÂ‘MªIdentifierÍøÍªpreferenceÂ¢>=Y§LiteralÍÍ ¡0N®BlockStatementÍ
+ÍA‘V¯ReturnStatementÍÍ2S°MemberExpressionÍ$Í1MªIdentifierÍ$Í*¦routesMªIdentifierÍ+Í0¥indexÃÂÀV¯ReturnStatementÍVÍgS°MemberExpressionÍ]ÍfMªIdentifierÍ]Íc¦routesY§LiteralÍdÍe ¡0ÃÂO°MethodDefinitionÍtÍ4ÂÂMªIdentifierÍtÍ­estimatedWait¦methodP²FunctionExpressionÍÍ4ÀÂÂÂ’MªIdentifierÍ‚Í‹©queueSizeMªIdentifierÍÍ¡´serviceRatePerMinuteN®BlockStatementÍ£Í4’a«IfStatementÍ®Íğ\°BinaryExpressionÍ²ÍËMªIdentifierÍ²ÍÆ´serviceRatePerMinute¢<=Y§LiteralÍÊÍË ¡0N®BlockStatementÍÍÍğ‘V¯ReturnStatementÍÜÍåY§LiteralÍãÍä ¡0ÀV¯ReturnStatementÍúÍ-X®CallExpressionÍÍ,S°MemberExpressionÍÍ
+MªIdentifierÍÍ¤MathMªIdentifierÍÍ
+¤ceilÂÂ‘\°BinaryExpressionÍÍ+MªIdentifierÍÍ©queueSize¡/MªIdentifierÍÍ+´serviceRatePerMinuteÂO°MethodDefinitionÍ:ÍòÂÂMªIdentifierÍ:ÍF¬crowdForSpot¦methodP²FunctionExpressionÍFÍòÀÂÂÂ’MªIdentifierÍGÍK¤spotMªIdentifierÍMÍV©snapshotsN®BlockStatementÍXÍò’_¬ForStatementÍcÍ]³VariableDeclarationÍhÍu‘^²VariableDeclaratorÍlÍuMªIdentifierÍlÍq¥indexY§LiteralÍtÍu ¡0£let\°BinaryExpressionÍwÍMªIdentifierÍwÍ|¥index¡<S°MemberExpressionÍÍMªIdentifierÍÍˆ©snapshotsMªIdentifierÍ‰Í¦lengthÂÂ`°UpdateExpressionÍ‘Í˜¢++ÂMªIdentifierÍ‘Í–¥indexN®BlockStatementÍšÍ‘a«IfStatementÍ©Í\°BinaryExpressionÍ­ÍĞS°MemberExpressionÍ­ÍÄS°MemberExpressionÍ­Í½MªIdentifierÍ­Í¶©snapshotsMªIdentifierÍ·Í¼¥indexÃÂMªIdentifierÍ¾ÍÄ¦spotIdÂÂ£===S°MemberExpressionÍÉÍĞMªIdentifierÍÉÍÍ¤spotMªIdentifierÍÎÍĞ¢idÂÂN®BlockStatementÍÒÍ‘V¯ReturnStatementÍåÍıS°MemberExpressionÍìÍüMªIdentifierÍìÍõ©snapshotsMªIdentifierÍöÍû¥indexÃÂÀV¯ReturnStatementÍ!ÍëÔrb”¤type¥start£endªproperties°ObjectExpressionÍ(Íê•Ôrc™¤type¥start£end¦method©shorthand¨computed£key¥value¤kind¨PropertyÍ7ÍFÂÂÂMªIdentifierÍ7Í=¦spotIdS°MemberExpressionÍ?ÍFMªIdentifierÍ?ÍC¤spotMªIdentifierÍDÍF¢idÂÂ¤initc¨PropertyÍUÍvÂÂÂMªIdentifierÍUÍc®currentPercentS°MemberExpressionÍeÍvMªIdentifierÍeÍi¤spotMªIdentifierÍjÍv¬crowdPercentÂÂ¤initc¨PropertyÍ…Í§ÂÂÂMªIdentifierÍ…Í”¯forecastPercentS°MemberExpressionÍ–Í§MªIdentifierÍ–Íš¤spotMªIdentifierÍ›Í§¬crowdPercentÂÂ¤initc¨PropertyÍ¶ÍÁÂÂÂMªIdentifierÍ¶Í»¥trendY§LiteralÍ½ÍÁ¦å¹³ç¨³¨'å¹³ç¨³'¤initc¨PropertyÍĞÍßÂÂÂMªIdentifierÍĞÍÙ©updatedAtY§LiteralÍÛÍß¦åˆšåˆš¨'åˆšåˆš'¤initO°MethodDefinitionÍøÍõÂÂMªIdentifierÍøÍªcrowdLevel¦methodP²FunctionExpressionÍÍõÀÂÂÂ‘MªIdentifierÍÍ
+§percentN®BlockStatementÍÍõ”a«IfStatementÍÍP\°BinaryExpressionÍÍ(MªIdentifierÍÍ"§percent¢<=Y§LiteralÍ&Í(-¢45N®BlockStatementÍ*ÍP‘V¯ReturnStatementÍ9ÍEY§LiteralÍ@ÍD¦ç•…é€š¨'ç•…é€š'Àa«IfStatementÍZÍ“\°BinaryExpressionÍ^ÍkMªIdentifierÍ^Íe§percent¢<=Y§LiteralÍiÍkÌF¢70N®BlockStatementÍmÍ“‘V¯ReturnStatementÍ|ÍˆY§LiteralÍƒÍ‡¦é€‚ä¸­¨'é€‚ä¸­'Àa«IfStatementÍÍÖ\°BinaryExpressionÍ¡Í®MªIdentifierÍ¡Í¨§percent¢<=Y§LiteralÍ¬Í®ÌU¢85N®BlockStatementÍ°ÍÖ‘V¯ReturnStatementÍ¿ÍËY§LiteralÍÆÍÊ¦æ‹¥æŒ¤¨'æ‹¥æŒ¤'ÀV¯ReturnStatementÍàÍîY§LiteralÍçÍí¬ä¸¥é‡æ‹¥æŒ¤®'ä¸¥é‡æ‹¥æŒ¤'O°MethodDefinitionÍûÍ	ÂÂMªIdentifierÍûÍ©heatColor¦methodP²FunctionExpressionÍÍ	ÀÂÂÂ‘MªIdentifierÍÍ§percentN®BlockStatementÍÍ	”a«IfStatementÍÍW\°BinaryExpressionÍÍ*MªIdentifierÍÍ$§percent¢<=Y§LiteralÍ(Í*-¢45N®BlockStatementÍ,ÍW‘V¯ReturnStatementÍ;ÍLY§LiteralÍBÍK§#2E9B63©'#2E9B63'Àa«IfStatementÍaÍŸ\°BinaryExpressionÍeÍrMªIdentifierÍeÍl§percent¢<=Y§LiteralÍpÍrÌF¢70N®BlockStatementÍtÍŸ‘V¯ReturnStatementÍƒÍ”Y§LiteralÍŠÍ“§#D7A72E©'#D7A72E'Àa«IfStatementÍ©Íç\°BinaryExpressionÍ­ÍºMªIdentifierÍ­Í´§percent¢<=Y§LiteralÍ¸ÍºÌU¢85N®BlockStatementÍ¼Íç‘V¯ReturnStatementÍËÍÜY§LiteralÍÒÍÛ§#E57C32©'#E57C32'ÀV¯ReturnStatementÍñÍY§LiteralÍøÍ§#D84A4A©'#D84A4A'O°MethodDefinitionÍÍ\ÂÂMªIdentifierÍÍ«isHighCrowd¦methodP²FunctionExpressionÍÍ\ÀÂÂÂ‘MªIdentifierÍÍ#¨snapshotN®BlockStatementÍ%Í\‘V¯ReturnStatementÍ0ÍU\°BinaryExpressionÍ7ÍTS°MemberExpressionÍ7ÍOMªIdentifierÍ7Í?¨snapshotMªIdentifierÍ@ÍO¯forecastPercentÂÂ¡>Y§LiteralÍRÍTÌF¢70O°MethodDefinitionÍbÍ9ÂÂMªIdentifierÍbÍs±generateItinerary¦methodP²FunctionExpressionÍsÍ9ÀÂÂÂ“MªIdentifierÍtÍ{§profileMªIdentifierÍ}Í‚¥spotsMªIdentifierÍ„Í©snapshotsN®BlockStatementÍÍ9œ]³VariableDeclarationÍšÍµ‘^²VariableDeclaratorÍ Í´MªIdentifierÍ Í¯¯selectedSpotIdsÔrd”¤type¥start£end¨elements¯ArrayExpressionÍ²Í´¥const]³VariableDeclarationÍ¿ÍÛ‘^²VariableDeclaratorÍÅÍÚMªIdentifierÍÅÍÕ°avoidedSpotNamesd¯ArrayExpressionÍØÍÚ¥const]³VariableDeclarationÍåÍK‘^²VariableDeclaratorÍëÍJMªIdentifierÍëÍú¯targetStopCountX®CallExpressionÍıÍJS°MemberExpressionÍıÍMªIdentifierÍıÍ¤MathMªIdentifierÍÍ£minÂÂ’S°MemberExpressionÍÍMªIdentifierÍÍ¥spotsMªIdentifierÍÍ¦lengthÂÂX®CallExpressionÍÍIS°MemberExpressionÍÍMªIdentifierÍÍ¤MathMªIdentifierÍÍ£maxÂÂ’Y§LiteralÍÍ¡2X®CallExpressionÍ ÍHS°MemberExpressionÍ Í*MªIdentifierÍ Í$¤MathMªIdentifierÍ%Í*¥floorÂÂ‘\°BinaryExpressionÍ+ÍGS°MemberExpressionÍ+ÍBMªIdentifierÍ+Í2§profileMªIdentifierÍ3ÍB¯durationMinutesÂÂ¡/Y§LiteralÍEÍG<¢60ÂÂÂ¥const]³VariableDeclarationÍUÍl‘^²VariableDeclaratorÍYÍkMªIdentifierÍYÍg®elapsedMinutesY§LiteralÍjÍk ¡0£let]³VariableDeclarationÍvÍˆ‘^²VariableDeclaratorÍzÍ‡MªIdentifierÍzÍ‚¨currentXY§LiteralÍ…Í‡¢31£let]³VariableDeclarationÍ’Í¤‘^²VariableDeclaratorÍ–Í£MªIdentifierÍ–Í¨currentYY§LiteralÍ¡Í£1¢49£let_¬ForStatementÍ®ÍÒ]³VariableDeclarationÍ³ÍÀ‘^²VariableDeclaratorÍ·ÍÀMªIdentifierÍ·Í¼¥roundY§LiteralÍ¿ÍÀ ¡0£let\°BinaryExpressionÍÂÍÙMªIdentifierÍÂÍÇ¥round¡<MªIdentifierÍÊÍÙ¯targetStopCount`°UpdateExpressionÍÛÍâ¢++ÂMªIdentifierÍÛÍà¥roundN®BlockStatementÍäÍÒ˜]³VariableDeclarationÍóÍ	q‘^²VariableDeclaratorÍ÷Í	pMªIdentifierÍ÷Í	 ©candidateX®CallExpressionÍ	Í	pS°MemberExpressionÍ	Í	T®ThisExpressionÍ	Í	MªIdentifierÍ	Í	±findBestCandidateÂÂ˜MªIdentifierÍ	Í	!§profileMªIdentifierÍ	#Í	(¥spotsMªIdentifierÍ	*Í	3©snapshotsMªIdentifierÍ	5Í	D¯selectedSpotIdsMªIdentifierÍ	FÍ	N¨currentXMªIdentifierÍ	PÍ	X¨currentYMªIdentifierÍ	ZÍ	h®elapsedMinutesY§LiteralÍ	jÍ	oÂ¥falseÂ£leta«IfStatementÍ	Í
+7\°BinaryExpressionÍ	ƒÍ	šMªIdentifierÍ	ƒÍ	Œ©candidate£===MªIdentifierÍ	‘Í	š©undefinedN®BlockStatementÍ	œÍ
+7‘Q³ExpressionStatementÍ	¯Í
+(R´AssignmentExpressionÍ	¯Í
+'¡=MªIdentifierÍ	¯Í	¸©candidateX®CallExpressionÍ	»Í
+'S°MemberExpressionÍ	»Í	ÑT®ThisExpressionÍ	»Í	¿MªIdentifierÍ	ÀÍ	Ñ±findBestCandidateÂÂ˜MªIdentifierÍ	ÒÍ	Ù§profileMªIdentifierÍ	ÛÍ	à¥spotsMªIdentifierÍ	âÍ	ë©snapshotsMªIdentifierÍ	íÍ	ü¯selectedSpotIdsMªIdentifierÍ	şÍ
+¨currentXMªIdentifierÍ
+Í
+¨currentYMªIdentifierÍ
+Í
+ ®elapsedMinutesY§LiteralÍ
+"Í
+&Ã¤trueÂÀa«IfStatementÍ
+EÍ
+Š\°BinaryExpressionÍ
+IÍ
+`MªIdentifierÍ
+IÍ
+R©candidate£===MªIdentifierÍ
+WÍ
+`©undefinedN®BlockStatementÍ
+bÍ
+Š‘Ôre”¤type¥start£end¥label®BreakStatementÍ
+uÍ
+{ÀÀ]³VariableDeclarationÍ
+˜Í
+ö‘^²VariableDeclaratorÍ
+Í
+õMªIdentifierÍ
+Í
+«­travelMinutesX®CallExpressionÍ
+®Í
+õS°MemberExpressionÍ
+®Í
+ÇT®ThisExpressionÍ
+®Í
+²MªIdentifierÍ
+³Í
+Ç´estimatedWalkMinutesÂÂ”MªIdentifierÍ
+ÈÍ
+Ğ¨currentXMªIdentifierÍ
+ÒÍ
+Ú¨currentYS°MemberExpressionÍ
+ÜÍ
+çMªIdentifierÍ
+ÜÍ
+å©candidateMªIdentifierÍ
+æÍ
+ç¡xÂÂS°MemberExpressionÍ
+éÍ
+ôMªIdentifierÍ
+éÍ
+ò©candidateMªIdentifierÍ
+óÍ
+ô¡yÂÂÂ¥constQ³ExpressionStatementÍÍ'X®CallExpressionÍÍ&S°MemberExpressionÍÍMªIdentifierÍÍ¯selectedSpotIdsMªIdentifierÍÍ¤pushÂÂ‘S°MemberExpressionÍÍ%MªIdentifierÍÍ"©candidateMªIdentifierÍ#Í%¢idÂÂÂQ³ExpressionStatementÍ5Í}R´AssignmentExpressionÍ5Í|¡=MªIdentifierÍ5ÍC®elapsedMinutes\°BinaryExpressionÍFÍ|\°BinaryExpressionÍFÍdMªIdentifierÍFÍT®elapsedMinutes¡+MªIdentifierÍWÍd­travelMinutes¡+S°MemberExpressionÍgÍ|MªIdentifierÍgÍp©candidateMªIdentifierÍqÍ|«stayMinutesÂÂQ³ExpressionStatementÍ‹Í¢R´AssignmentExpressionÍ‹Í¡¡=MªIdentifierÍ‹Í“¨currentXS°MemberExpressionÍ–Í¡MªIdentifierÍ–ÍŸ©candidateMªIdentifierÍ Í¡¡xÂÂQ³ExpressionStatementÍ°ÍÇR´AssignmentExpressionÍ°ÍÆ¡=MªIdentifierÍ°Í¸¨currentYS°MemberExpressionÍ»ÍÆMªIdentifierÍ»ÍÄ©candidateMªIdentifierÍÅÍÆ¡yÂÂ_¬ForStatementÍÜÍ!]³VariableDeclarationÍáÍî‘^²VariableDeclaratorÍåÍîMªIdentifierÍåÍê¥indexY§LiteralÍíÍî ¡0£let\°BinaryExpressionÍğÍMªIdentifierÍğÍõ¥index¡<S°MemberExpressionÍøÍMªIdentifierÍøÍı¥spotsMªIdentifierÍşÍ¦lengthÂÂ`°UpdateExpressionÍÍ¢++ÂMªIdentifierÍÍ¥indexN®BlockStatementÍÍ!’]³VariableDeclarationÍÍZ‘^²VariableDeclaratorÍ$ÍYMªIdentifierÍ$Í,¨snapshotX®CallExpressionÍ/ÍYS°MemberExpressionÍ/Í@T®ThisExpressionÍ/Í3MªIdentifierÍ4Í@¬crowdForSpotÂÂ’S°MemberExpressionÍAÍMMªIdentifierÍAÍF¥spotsMªIdentifierÍGÍL¥indexÃÂMªIdentifierÍOÍX©snapshotsÂ¥consta«IfStatementÍhÍ\±LogicalExpressionÍlÍÉX®CallExpressionÍlÍ†S°MemberExpressionÍlÍ|T®ThisExpressionÍlÍpMªIdentifierÍqÍ|«isHighCrowdÂÂ‘MªIdentifierÍ}Í…¨snapshotÂ¢&&\°BinaryExpressionÍŠÍÉX®CallExpressionÍŠÍÅS°MemberExpressionÍŠÍ¡T®ThisExpressionÍŠÍMªIdentifierÍÍ¡²interestMatchCountÂÂ’S°MemberExpressionÍ¢Í®MªIdentifierÍ¢Í§¥spotsMªIdentifierÍ¨Í­¥indexÃÂS°MemberExpressionÍ°ÍÄMªIdentifierÍ°Í·§profileMªIdentifierÍ¸ÍÄ¬interestTagsÂÂÂ¡>Y§LiteralÍÈÍÉ ¡0N®BlockStatementÍËÍ‘Q³ExpressionStatementÍŞÍX®CallExpressionÍŞÍS°MemberExpressionÍŞÍóMªIdentifierÍŞÍî°avoidedSpotNamesMªIdentifierÍïÍó¤pushÂÂ‘S°MemberExpressionÍôÍS°MemberExpressionÍôÍ MªIdentifierÍôÍù¥spotsMªIdentifierÍúÍÿ¥indexÃÂMªIdentifierÍÍ¤nameÂÂÂÀ]³VariableDeclarationÍ+Íu‘^²VariableDeclaratorÍ1ÍtMªIdentifierÍ1Í=¬comfortScoreX®CallExpressionÍ@ÍtS°MemberExpressionÍ@ÍQT®ThisExpressionÍ@ÍDMªIdentifierÍEÍQ¬comfortScoreÂÂ“MªIdentifierÍRÍa¯selectedSpotIdsMªIdentifierÍcÍh¥spotsMªIdentifierÍjÍs©snapshotsÂ¥const]³VariableDeclarationÍÍµ‘^²VariableDeclaratorÍ…Í´MªIdentifierÍ…Í•°savedWaitMinutes\°BinaryExpressionÍ˜Í´S°MemberExpressionÍ˜Í¯MªIdentifierÍ˜Í¨°avoidedSpotNamesMªIdentifierÍ©Í¯¦lengthÂÂ¡*Y§LiteralÍ²Í´¢18¥const]³VariableDeclarationÍ¿Íc‘^²VariableDeclaratorÍÅÍbMªIdentifierÍÅÍĞ«explanationaµConditionalExpressionÍÓÍb\°BinaryExpressionÍÓÍîS°MemberExpressionÍÓÍêMªIdentifierÍÓÍã°avoidedSpotNamesMªIdentifierÍäÍê¦lengthÂÂ¡>Y§LiteralÍíÍî ¡0W¯TemplateLiteralÍşÍ4‘X®CallExpressionÍÍS°MemberExpressionÍÍMªIdentifierÍÍ°avoidedSpotNamesMªIdentifierÍÍ¤joinÂÂ‘Y§LiteralÍÍ£ã€¥'ã€'Â’Z¯TemplateElementÍÿÍ[ªå·²é¿å¼€ ªå·²é¿å¼€ ÂZ¯TemplateElementÍ Í3[Ù7 çš„é¢„æµ‹é«˜å³°ï¼Œä¼˜å…ˆå®‰æ’åŒç±»ä½çƒ­åº¦æ™¯ç‚¹ã€‚Ù7 çš„é¢„æµ‹é«˜å³°ï¼Œä¼˜å…ˆå®‰æ’åŒç±»ä½çƒ­åº¦æ™¯ç‚¹ã€‚ÃY§LiteralÍDÍbÙTå½“å‰å®¢æµå¹³ç¨³ï¼Œå·²æŒ‰å…´è¶£ã€æ­¥è¡Œè·ç¦»ä¸æ¸¸ç©æ—¶é—´ç”Ÿæˆèˆ’é€‚è·¯çº¿ã€‚ÙV'å½“å‰å®¢æµå¹³ç¨³ï¼Œå·²æŒ‰å…´è¶£ã€æ­¥è¡Œè·ç¦»ä¸æ¸¸ç©æ—¶é—´ç”Ÿæˆèˆ’é€‚è·¯çº¿ã€‚'¥constV¯ReturnStatementÍmÍ2b°ObjectExpressionÍtÍ1™c¨PropertyÍƒÍ ÂÂÂMªIdentifierÍƒÍ…¢idW¯TemplateLiteralÍ‡Í ‘X®CallExpressionÍ”ÍS°MemberExpressionÍ”ÍœMªIdentifierÍ”Í˜¤DateMªIdentifierÍ™Íœ£nowÂÂÂ’Z¯TemplateElementÍˆÍ’[ªitinerary-ªitinerary-ÂZ¯TemplateElementÍŸÍŸ[  Ã¤initc¨PropertyÍ¯ÍÿÂÂÂMªIdentifierÍ¯Í´¥titleW¯TemplateLiteralÍ¶Íÿ’\°BinaryExpressionÍ¹ÍÕS°MemberExpressionÍ¹ÍĞMªIdentifierÍ¹ÍÀ§profileMªIdentifierÍÁÍĞ¯durationMinutesÂÂ¡/Y§LiteralÍÓÍÕ<¢60X®CallExpressionÍÛÍùS°MemberExpressionÍÛÍôS°MemberExpressionÍÛÍïMªIdentifierÍÛÍâ§profileMªIdentifierÍãÍï¬interestTagsÂÂMªIdentifierÍğÍô¤joinÂÂ‘Y§LiteralÍõÍø¢Â·¤'Â·'Â“Z¯TemplateElementÍ·Í·[  ÂZ¯TemplateElementÍÖÍÙ[§ å°æ—¶§ å°æ—¶ÂZ¯TemplateElementÍúÍş[¬é”™å³°è¡Œç¨‹¬é”™å³°è¡Œç¨‹Ã¤initc¨PropertyÍÍ&ÂÂÂMªIdentifierÍÍ§spotIdsMªIdentifierÍÍ&¯selectedSpotIds¤initc¨PropertyÍ5ÍTÂÂÂMªIdentifierÍ5ÍD¯durationMinutesMªIdentifierÍFÍT®elapsedMinutes¤initc¨PropertyÍcÍ}ÂÂÂMªIdentifierÍcÍo¬comfortScoreMªIdentifierÍqÍ}¬comfortScore¤initc¨PropertyÍŒÍ®ÂÂÂMªIdentifierÍŒÍœ°avoidedSpotNamesMªIdentifierÍÍ®°avoidedSpotNames¤initc¨PropertyÍ½ÍßÂÂÂMªIdentifierÍ½ÍÍ°savedWaitMinutesMªIdentifierÍÏÍß°savedWaitMinutes¤initc¨PropertyÍîÍÂÂÂMªIdentifierÍîÍù«explanationMªIdentifierÍûÍ«explanation¤initc¨PropertyÍÍ&ÂÂÂMªIdentifierÍÍ «generatedAtY§LiteralÍ"Í&¦åˆšåˆš¨'åˆšåˆš'¤initO°MethodDefinitionÍ?ÍšÂÂMªIdentifierÍ?ÍN¯replanItinerary¦methodP²FunctionExpressionÍNÍšÀÂÂÂ•MªIdentifierÍOÍS¤planMªIdentifierÍUÍc®completedCountMªIdentifierÍeÍl§profileMªIdentifierÍnÍs¥spotsMªIdentifierÍuÍ~©snapshotsN®BlockStatementÍ€Íš—]³VariableDeclarationÍ‹Í¢‘^²VariableDeclaratorÍ‘Í¡MªIdentifierÍ‘Íœ«nextSpotIdsd¯ArrayExpressionÍŸÍ¡¥const]³VariableDeclarationÍ¬ÍÅ‘^²VariableDeclaratorÍ²ÍÄMªIdentifierÍ²Í¿­replacedNamesd¯ArrayExpressionÍÂÍÄ¥const_¬ForStatementÍÏÍ»]³VariableDeclarationÍÔÍá‘^²VariableDeclaratorÍØÍáMªIdentifierÍØÍİ¥indexY§LiteralÍàÍá ¡0£let\°BinaryExpressionÍãÍşMªIdentifierÍãÍè¥index¡<S°MemberExpressionÍëÍşS°MemberExpressionÍëÍ÷MªIdentifierÍëÍï¤planMªIdentifierÍğÍ÷§spotIdsÂÂMªIdentifierÍøÍş¦lengthÂÂ`°UpdateExpressionÍ Í¢++ÂMªIdentifierÍ Í¥indexN®BlockStatementÍ	Í»—]³VariableDeclarationÍÍ;‘^²VariableDeclaratorÍÍ:MªIdentifierÍÍ$¦spotIdS°MemberExpressionÍ'Í:S°MemberExpressionÍ'Í3MªIdentifierÍ'Í+¤planMªIdentifierÍ,Í3§spotIdsÂÂMªIdentifierÍ4Í9¥indexÃÂ¥const]³VariableDeclarationÍIÍs‘^²VariableDeclaratorÍOÍrMªIdentifierÍOÍS¤spotX®CallExpressionÍVÍrS°MemberExpressionÍVÍcT®ThisExpressionÍVÍZMªIdentifierÍ[Íc¨findSpotÂÂ’MªIdentifierÍdÍi¥spotsMªIdentifierÍkÍq¦spotIdÂ¥consta«IfStatementÍÍB\±LogicalExpressionÍ…Íê\±LogicalExpressionÍ…Í±\°BinaryExpressionÍ…Í—MªIdentifierÍ…Í‰¤spot£===MªIdentifierÍÍ—©undefined¢||\°BinaryExpressionÍ›Í±MªIdentifierÍ›Í ¥index¡<MªIdentifierÍ£Í±®completedCount¢||`¯UnaryExpressionÍµÍê¡!ÃX®CallExpressionÍ¶ÍêS°MemberExpressionÍ¶ÍÆT®ThisExpressionÍ¶ÍºMªIdentifierÍ»ÍÆ«isHighCrowdÂÂ‘X®CallExpressionÍÇÍéS°MemberExpressionÍÇÍØT®ThisExpressionÍÇÍËMªIdentifierÍÌÍØ¬crowdForSpotÂÂ’MªIdentifierÍÙÍİ¤spotMªIdentifierÍßÍè©snapshotsÂÂN®BlockStatementÍìÍB’Q³ExpressionStatementÍÿÍX®CallExpressionÍÿÍS°MemberExpressionÍÿÍMªIdentifierÍÿÍ
+«nextSpotIdsMªIdentifierÍÍ¤pushÂÂ‘MªIdentifierÍÍ¦spotIdÂe±ContinueStatementÍ*Í3ÀÀ]³VariableDeclarationÍPÍ·‘^²VariableDeclaratorÍVÍ¶MªIdentifierÍVÍa«alternativeX®CallExpressionÍdÍ¶S°MemberExpressionÍdÍxT®ThisExpressionÍdÍhMªIdentifierÍiÍx¯findAlternativeÂÂ–MªIdentifierÍyÍ€§profileMªIdentifierÍ‚Í‡¥spotsMªIdentifierÍ‰Í’©snapshotsMªIdentifierÍ”ÍŸ«nextSpotIdsS°MemberExpressionÍ¡Í­MªIdentifierÍ¡Í¥¤planMªIdentifierÍ¦Í­§spotIdsÂÂMªIdentifierÍ¯Íµ¦spotIdÂ¥consta«IfStatementÍÅÍ:\°BinaryExpressionÍÉÍâMªIdentifierÍÉÍÔ«alternative£===MªIdentifierÍÙÍâ©undefinedN®BlockStatementÍäÍ:’Q³ExpressionStatementÍ÷ÍX®CallExpressionÍ÷ÍS°MemberExpressionÍ÷ÍMªIdentifierÍ÷Í«nextSpotIdsMªIdentifierÍÍ¤pushÂÂ‘MªIdentifierÍÍ¦spotIdÂe±ContinueStatementÍ"Í+ÀÀQ³ExpressionStatementÍHÍiX®CallExpressionÍHÍhS°MemberExpressionÍHÍXMªIdentifierÍHÍS«nextSpotIdsMªIdentifierÍTÍX¤pushÂÂ‘S°MemberExpressionÍYÍgMªIdentifierÍYÍd«alternativeMªIdentifierÍeÍg¢idÂÂÂQ³ExpressionStatementÍwÍ°X®CallExpressionÍwÍ¯S°MemberExpressionÍwÍ‰MªIdentifierÍwÍ„­replacedNamesMªIdentifierÍ…Í‰¤pushÂÂ‘W¯TemplateLiteralÍŠÍ®’S°MemberExpressionÍÍ–MªIdentifierÍÍ‘¤spotMªIdentifierÍ’Í–¤nameÂÂS°MemberExpressionÍœÍ¬MªIdentifierÍœÍ§«alternativeMªIdentifierÍ¨Í¬¤nameÂÂ“Z¯TemplateElementÍ‹Í‹[  ÂZ¯TemplateElementÍ—Íš[¥ â†’ ¥ â†’ ÂZ¯TemplateElementÍ­Í­[  ÃÂa«IfStatementÍÅÍ?\°BinaryExpressionÍÉÍãS°MemberExpressionÍÉÍİMªIdentifierÍÉÍÖ­replacedNamesMªIdentifierÍ×Íİ¦lengthÂÂ£===Y§LiteralÍâÍã ¡0N®BlockStatementÍåÍ?‘V¯ReturnStatementÍôÍ4b°ObjectExpressionÍûÍ3“c¨PropertyÍıÍÂÂÂMªIdentifierÍıÍ¤planMªIdentifierÍÍ¤plan¤initc¨PropertyÍ	ÍÂÂÂMªIdentifierÍ	Í§changedY§LiteralÍÍÂ¥false¤initc¨PropertyÍÍ1ÂÂÂMªIdentifierÍÍ¦reasonY§LiteralÍ!Í1Ù*æœªå‘ç°éœ€è¦ç»•è¡Œçš„æœªåˆ°è¾¾æ™¯ç‚¹ã€‚Ù,'æœªå‘ç°éœ€è¦ç»•è¡Œçš„æœªåˆ°è¾¾æ™¯ç‚¹ã€‚'¤initÀ]³VariableDeclarationÍIÍ‘^²VariableDeclaratorÍOÍ~MªIdentifierÍOÍU¦reasonW¯TemplateLiteralÍXÍ~‘X®CallExpressionÍdÍ{S°MemberExpressionÍdÍvMªIdentifierÍdÍq­replacedNamesMªIdentifierÍrÍv¤joinÂÂ‘Y§LiteralÍwÍz£ï¼›¥'ï¼›'Â’Z¯TemplateElementÍYÍb[»é¢„æµ‹é«˜å³°è§¦å‘ç»•è¡Œï¼š»é¢„æµ‹é«˜å³°è§¦å‘ç»•è¡Œï¼šÂZ¯TemplateElementÍ|Í}[£ã€‚£ã€‚Ã¥const]³VariableDeclarationÍ‰ÍO‘^²VariableDeclaratorÍÍNMªIdentifierÍÍ˜©replannedb°ObjectExpressionÍ›ÍN™c¨PropertyÍªÍµÂÂÂMªIdentifierÍªÍ¬¢idS°MemberExpressionÍ®ÍµMªIdentifierÍ®Í²¤planMªIdentifierÍ³Íµ¢idÂÂ¤initc¨PropertyÍÄÍÕÂÂÂMªIdentifierÍÄÍÉ¥titleS°MemberExpressionÍËÍÕMªIdentifierÍËÍÏ¤planMªIdentifierÍĞÍÕ¥titleÂÂ¤initc¨PropertyÍäÍøÂÂÂMªIdentifierÍäÍë§spotIdsMªIdentifierÍíÍø«nextSpotIds¤initc¨PropertyÍÍ,ÂÂÂMªIdentifierÍÍ¯durationMinutesS°MemberExpressionÍÍ,MªIdentifierÍÍ¤planMªIdentifierÍÍ,¯durationMinutesÂÂ¤initc¨PropertyÍ;ÍyÂÂÂMªIdentifierÍ;ÍG¬comfortScoreX®CallExpressionÍIÍyS°MemberExpressionÍIÍZT®ThisExpressionÍIÍMMªIdentifierÍNÍZ¬comfortScoreÂÂ“MªIdentifierÍ[Íf«nextSpotIdsMªIdentifierÍhÍm¥spotsMªIdentifierÍoÍx©snapshotsÂ¤initc¨PropertyÍˆÍ¯ÂÂÂMªIdentifierÍˆÍ˜°avoidedSpotNamesS°MemberExpressionÍšÍ¯MªIdentifierÍšÍ¤planMªIdentifierÍŸÍ¯°avoidedSpotNamesÂÂ¤initc¨PropertyÍ¾ÍÂÂÂMªIdentifierÍ¾ÍÎ°savedWaitMinutes\°BinaryExpressionÍĞÍS°MemberExpressionÍĞÍåMªIdentifierÍĞÍÔ¤planMªIdentifierÍÕÍå°savedWaitMinutesÂÂ¡+\°BinaryExpressionÍèÍS°MemberExpressionÍèÍüMªIdentifierÍèÍõ­replacedNamesMªIdentifierÍöÍü¦lengthÂÂ¡*Y§LiteralÍÿÍ¢18¤initc¨PropertyÍÍ#ÂÂÂMªIdentifierÍÍ«explanationMªIdentifierÍÍ#¦reason¤initc¨PropertyÍ2ÍCÂÂÂMªIdentifierÍ2Í=«generatedAtY§LiteralÍ?ÍC¦åˆšåˆš¨'åˆšåˆš'¤init¥constV¯ReturnStatementÍYÍ“b°ObjectExpressionÍ`Í’“c¨PropertyÍbÍqÂÂÂMªIdentifierÍbÍf¤planMªIdentifierÍhÍq©replanned¤initc¨PropertyÍsÍ€ÂÂÂMªIdentifierÍsÍz§changedY§LiteralÍ|Í€Ã¤true¤initc¨PropertyÍ‚ÍÂÂÂMªIdentifierÍ‚Íˆ¦reasonMªIdentifierÍŠÍ¦reason¤initO°MethodDefinitionÍ ÍæÂÂMªIdentifierÍ Í±±findBestCandidate¦methodP²FunctionExpressionÍ±ÍæÀÂÂÂ˜MªIdentifierÍ²Í¹§profileMªIdentifierÍ»ÍÀ¥spotsMªIdentifierÍÂÍË©snapshotsMªIdentifierÍÍÍÜ¯selectedSpotIdsMªIdentifierÍŞÍæ¨currentXMªIdentifierÍèÍğ¨currentYMªIdentifierÍòÍ ®elapsedMinutesMªIdentifierÍÍ®allowHighCrowdN®BlockStatementÍÍæ”]³VariableDeclarationÍÍ2‘^²VariableDeclaratorÍ!Í1MªIdentifierÍ!Í%¤bestMªIdentifierÍ(Í1©undefined£let]³VariableDeclarationÍ<ÍT‘^²VariableDeclaratorÍ@ÍSMªIdentifierÍ@ÍI©bestScore`¯UnaryExpressionÍLÍS¡-ÃY§LiteralÍMÍSÎ † ¦100000£let_¬ForStatementÍ^ÍÉ]³VariableDeclarationÍcÍp‘^²VariableDeclaratorÍgÍpMªIdentifierÍgÍl¥indexY§LiteralÍoÍp ¡0£let\°BinaryExpressionÍrÍ†MªIdentifierÍrÍw¥index¡<S°MemberExpressionÍzÍ†MªIdentifierÍzÍ¥spotsMªIdentifierÍ€Í†¦lengthÂÂ`°UpdateExpressionÍˆÍ¢++ÂMªIdentifierÍˆÍ¥indexN®BlockStatementÍ‘ÍÉ˜]³VariableDeclarationÍ Íº‘^²VariableDeclaratorÍ¦Í¹MªIdentifierÍ¦Íª¤spotS°MemberExpressionÍ­Í¹MªIdentifierÍ­Í²¥spotsMªIdentifierÍ³Í¸¥indexÃÂ¥consta«IfStatementÍÈÍ&X®CallExpressionÍÌÍùS°MemberExpressionÍÌÍßT®ThisExpressionÍÌÍĞMªIdentifierÍÑÍß®containsSpotIdÂÂ’MªIdentifierÍàÍï¯selectedSpotIdsS°MemberExpressionÍñÍøMªIdentifierÍñÍõ¤spotMªIdentifierÍöÍø¢idÂÂÂN®BlockStatementÍûÍ&‘e±ContinueStatementÍÍÀÀ]³VariableDeclarationÍ4Íh‘^²VariableDeclaratorÍ:ÍgMªIdentifierÍ:ÍB¨snapshotX®CallExpressionÍEÍgS°MemberExpressionÍEÍVT®ThisExpressionÍEÍIMªIdentifierÍJÍV¬crowdForSpotÂÂ’MªIdentifierÍWÍ[¤spotMªIdentifierÍ]Íf©snapshotsÂ¥consta«IfStatementÍvÍÔ\±LogicalExpressionÍzÍ§`¯UnaryExpressionÍzÍ‰¡!ÃMªIdentifierÍ{Í‰®allowHighCrowd¢&&X®CallExpressionÍÍ§S°MemberExpressionÍÍT®ThisExpressionÍÍ‘MªIdentifierÍ’Í«isHighCrowdÂÂ‘MªIdentifierÍÍ¦¨snapshotÂN®BlockStatementÍ©ÍÔ‘e±ContinueStatementÍ¼ÍÅÀÀ]³VariableDeclarationÍâÍ4‘^²VariableDeclaratorÍèÍ3MªIdentifierÍèÍó«walkMinutesX®CallExpressionÍöÍ3S°MemberExpressionÍöÍT®ThisExpressionÍöÍúMªIdentifierÍûÍ´estimatedWalkMinutesÂÂ”MªIdentifierÍÍ¨currentXMªIdentifierÍÍ"¨currentYS°MemberExpressionÍ$Í*MªIdentifierÍ$Í(¤spotMªIdentifierÍ)Í*¡xÂÂS°MemberExpressionÍ,Í2MªIdentifierÍ,Í0¤spotMªIdentifierÍ1Í2¡yÂÂÂ¥consta«IfStatementÍBÍ¼\°BinaryExpressionÍFÍ\°BinaryExpressionÍFÍu\°BinaryExpressionÍFÍbMªIdentifierÍFÍT®elapsedMinutes¡+MªIdentifierÍWÍb«walkMinutes¡+S°MemberExpressionÍeÍuMªIdentifierÍeÍi¤spotMªIdentifierÍjÍu«stayMinutesÂÂ¡>S°MemberExpressionÍxÍMªIdentifierÍxÍ§profileMªIdentifierÍ€Í¯durationMinutesÂÂN®BlockStatementÍ‘Í¼‘e±ContinueStatementÍ¤Í­ÀÀ]³VariableDeclarationÍÊÍG‘^²VariableDeclaratorÍĞÍFMªIdentifierÍĞÍÕ¥score\°BinaryExpressionÍØÍF\°BinaryExpressionÍØÍ4\°BinaryExpressionÍØÍX®CallExpressionÍØÍS°MemberExpressionÍØÍïT®ThisExpressionÍØÍÜMªIdentifierÍİÍï²interestMatchCountÂÂ’MªIdentifierÍğÍô¤spotS°MemberExpressionÍöÍ
+MªIdentifierÍöÍı§profileMªIdentifierÍşÍ
+¬interestTagsÂÂÂ¡*Y§LiteralÍÍÌd£100¡+\°BinaryExpressionÍÍ3Y§LiteralÍÍÌd£100¡-S°MemberExpressionÍÍ3MªIdentifierÍÍ#¨snapshotMªIdentifierÍ$Í3¯forecastPercentÂÂ¡-\°BinaryExpressionÍ7ÍFMªIdentifierÍ7ÍB«walkMinutes¡*Y§LiteralÍEÍF¡3¥consta«IfStatementÍUÍ¾\°BinaryExpressionÍYÍjMªIdentifierÍYÍ^¥score¡>MªIdentifierÍaÍj©bestScoreN®BlockStatementÍlÍ¾’Q³ExpressionStatementÍÍ‹R´AssignmentExpressionÍÍŠ¡=MªIdentifierÍÍƒ¤bestMªIdentifierÍ†ÍŠ¤spotQ³ExpressionStatementÍÍ¯R´AssignmentExpressionÍÍ®¡=MªIdentifierÍÍ¦©bestScoreMªIdentifierÍ©Í®¥scoreÀV¯ReturnStatementÍÓÍßMªIdentifierÍÚÍŞ¤bestO°MethodDefinitionÍìÍcÂÂMªIdentifierÍìÍû¯findAlternative¦methodP²FunctionExpressionÍûÍcÀÂÂÂ–MªIdentifierÍüÍ§profileMªIdentifierÍÍ
+¥spotsMªIdentifierÍÍ©snapshotsMªIdentifierÍÍ'°completedSpotIdsMªIdentifierÍ)Í8¯originalSpotIdsMªIdentifierÍ:ÍI¯replacingSpotIdN®BlockStatementÍKÍc”]³VariableDeclarationÍVÍk‘^²VariableDeclaratorÍZÍjMªIdentifierÍZÍ^¤bestMªIdentifierÍaÍj©undefined£let]³VariableDeclarationÍuÍ‘^²VariableDeclaratorÍyÍŒMªIdentifierÍyÍ‚©bestScore`¯UnaryExpressionÍ…ÍŒ¡-ÃY§LiteralÍ†ÍŒÎ † ¦100000£let_¬ForStatementÍ—ÍF]³VariableDeclarationÍœÍ©‘^²VariableDeclaratorÍ Í©MªIdentifierÍ Í¥¥indexY§LiteralÍ¨Í© ¡0£let\°BinaryExpressionÍ«Í¿MªIdentifierÍ«Í°¥index¡<S°MemberExpressionÍ³Í¿MªIdentifierÍ³Í¸¥spotsMªIdentifierÍ¹Í¿¦lengthÂÂ`°UpdateExpressionÍÁÍÈ¢++ÂMªIdentifierÍÁÍÆ¥indexN®BlockStatementÍÊÍF–]³VariableDeclarationÍÙÍó‘^²VariableDeclaratorÍßÍòMªIdentifierÍßÍã¤spotS°MemberExpressionÍæÍòMªIdentifierÍæÍë¥spotsMªIdentifierÍìÍñ¥indexÃÂ¥consta«IfStatementÍÍ°\±LogicalExpressionÍÍƒ\±LogicalExpressionÍÍR\°BinaryExpressionÍÍ S°MemberExpressionÍÍMªIdentifierÍÍ	¤spotMªIdentifierÍ
+Í¢idÂÂ£===MªIdentifierÍÍ ¯replacingSpotId¢||X®CallExpressionÍ$ÍRS°MemberExpressionÍ$Í7T®ThisExpressionÍ$Í(MªIdentifierÍ)Í7®containsSpotIdÂÂ’MªIdentifierÍ8ÍH°completedSpotIdsS°MemberExpressionÍJÍQMªIdentifierÍJÍN¤spotMªIdentifierÍOÍQ¢idÂÂÂ¢||X®CallExpressionÍVÍƒS°MemberExpressionÍVÍiT®ThisExpressionÍVÍZMªIdentifierÍ[Íi®containsSpotIdÂÂ’MªIdentifierÍjÍy¯originalSpotIdsS°MemberExpressionÍ{Í‚MªIdentifierÍ{Í¤spotMªIdentifierÍ€Í‚¢idÂÂÂN®BlockStatementÍ…Í°‘e±ContinueStatementÍ˜Í¡ÀÀ]³VariableDeclarationÍ¾Íò‘^²VariableDeclaratorÍÄÍñMªIdentifierÍÄÍÌ¨snapshotX®CallExpressionÍÏÍñS°MemberExpressionÍÏÍàT®ThisExpressionÍÏÍÓMªIdentifierÍÔÍà¬crowdForSpotÂÂ’MªIdentifierÍáÍå¤spotMªIdentifierÍçÍğ©snapshotsÂ¥consta«IfStatementÍ ÍKX®CallExpressionÍÍS°MemberExpressionÍÍT®ThisExpressionÍÍMªIdentifierÍ	Í«isHighCrowdÂÂ‘MªIdentifierÍÍ¨snapshotÂN®BlockStatementÍ ÍK‘e±ContinueStatementÍ3Í<ÀÀ]³VariableDeclarationÍYÍÄ‘^²VariableDeclaratorÍ_ÍÃMªIdentifierÍ_Íd¥score\°BinaryExpressionÍgÍÃ\°BinaryExpressionÍgÍ X®CallExpressionÍgÍšS°MemberExpressionÍgÍ~T®ThisExpressionÍgÍkMªIdentifierÍlÍ~²interestMatchCountÂÂ’MªIdentifierÍÍƒ¤spotS°MemberExpressionÍ…Í™MªIdentifierÍ…ÍŒ§profileMªIdentifierÍÍ™¬interestTagsÂÂÂ¡*Y§LiteralÍÍ Ìd£100¡+\°BinaryExpressionÍ¤ÍÂY§LiteralÍ¤Í§Ìd£100¡-S°MemberExpressionÍªÍÂMªIdentifierÍªÍ²¨snapshotMªIdentifierÍ³ÍÂ¯forecastPercentÂÂ¥consta«IfStatementÍÒÍ;\°BinaryExpressionÍÖÍçMªIdentifierÍÖÍÛ¥score¡>MªIdentifierÍŞÍç©bestScoreN®BlockStatementÍéÍ;’Q³ExpressionStatementÍüÍR´AssignmentExpressionÍüÍ¡=MªIdentifierÍüÍ ¤bestMªIdentifierÍÍ¤spotQ³ExpressionStatementÍÍ,R´AssignmentExpressionÍÍ+¡=MªIdentifierÍÍ#©bestScoreMªIdentifierÍ&Í+¥scoreÀV¯ReturnStatementÍPÍ\MªIdentifierÍWÍ[¤bestO°MethodDefinitionÍiÍûÂÂMªIdentifierÍiÍ}´estimatedWalkMinutes¦methodP²FunctionExpressionÍ}ÍûÀÂÂÂ”MªIdentifierÍ~Íƒ¥fromXMªIdentifierÍ…ÍŠ¥fromYMªIdentifierÍŒÍ£toXMªIdentifierÍ‘Í”£toYN®BlockStatementÍ–Íû‘V¯ReturnStatementÍ¡ÍôX®CallExpressionÍ¨ÍóS°MemberExpressionÍ¨Í°MªIdentifierÍ¨Í¬¤MathMªIdentifierÍ­Í°£maxÂÂ’Y§LiteralÍ±Í²¡8X®CallExpressionÍ´ÍòS°MemberExpressionÍ´Í½MªIdentifierÍ´Í¸¤MathMªIdentifierÍ¹Í½¤ceilÂÂ‘\°BinaryExpressionÍ¾Íñ\°BinaryExpressionÍ¿ÍìX®CallExpressionÍ¿ÍÔS°MemberExpressionÍ¿ÍÇMªIdentifierÍ¿ÍÃ¤MathMªIdentifierÍÄÍÇ£absÂÂ‘\°BinaryExpressionÍÈÍÓMªIdentifierÍÈÍÍ¥fromX¡-MªIdentifierÍĞÍÓ£toXÂ¡+X®CallExpressionÍ×ÍìS°MemberExpressionÍ×ÍßMªIdentifierÍ×ÍÛ¤MathMªIdentifierÍÜÍß£absÂÂ‘\°BinaryExpressionÍàÍëMªIdentifierÍàÍå¥fromY¡-MªIdentifierÍèÍë£toYÂ¡/Y§LiteralÍğÍñ¡4ÂÂO°MethodDefinitionÍÍ âÂÂMªIdentifierÍÍ¬comfortScore¦methodP²FunctionExpressionÍÍ âÀÂÂÂ“MªIdentifierÍÍ§spotIdsMªIdentifierÍÍ¥spotsMªIdentifierÍÍ'©snapshotsN®BlockStatementÍ)Í â”a«IfStatementÍ4Íq\°BinaryExpressionÍ8ÍLS°MemberExpressionÍ8ÍFMªIdentifierÍ8Í?§spotIdsMªIdentifierÍ@ÍF¦lengthÂÂ£===Y§LiteralÍKÍL ¡0N®BlockStatementÍNÍq‘V¯ReturnStatementÍ]ÍfY§LiteralÍdÍe ¡0À]³VariableDeclarationÍ{Í‰‘^²VariableDeclaratorÍÍˆMªIdentifierÍÍ„¥totalY§LiteralÍ‡Íˆ ¡0£let_¬ForStatementÍ“Í §]³VariableDeclarationÍ˜Í¥‘^²VariableDeclaratorÍœÍ¥MªIdentifierÍœÍ¡¥indexY§LiteralÍ¤Í¥ ¡0£let\°BinaryExpressionÍ§Í½MªIdentifierÍ§Í¬¥index¡<S°MemberExpressionÍ¯Í½MªIdentifierÍ¯Í¶§spotIdsMªIdentifierÍ·Í½¦lengthÂÂ`°UpdateExpressionÍ¿ÍÆ¢++ÂMªIdentifierÍ¿ÍÄ¥indexN®BlockStatementÍÈÍ §’]³VariableDeclarationÍ×Í 	‘^²VariableDeclaratorÍİÍ MªIdentifierÍİÍá¤spotX®CallExpressionÍäÍ S°MemberExpressionÍäÍñT®ThisExpressionÍäÍèMªIdentifierÍéÍñ¨findSpotÂÂ’MªIdentifierÍòÍ÷¥spotsS°MemberExpressionÍùÍ MªIdentifierÍùÍ  §spotIdsMªIdentifierÍ Í ¥indexÃÂÂ¥consta«IfStatementÍ Í œ\°BinaryExpressionÍ Í -MªIdentifierÍ Í ¤spot£!==MªIdentifierÍ $Í -©undefinedN®BlockStatementÍ /Í œ‘Q³ExpressionStatementÍ BÍ R´AssignmentExpressionÍ BÍ Œ¡=MªIdentifierÍ BÍ G¥total\°BinaryExpressionÍ JÍ ŒMªIdentifierÍ JÍ O¥total¡+\°BinaryExpressionÍ SÍ ‹Y§LiteralÍ SÍ VÌd£100¡-S°MemberExpressionÍ YÍ ‹X®CallExpressionÍ YÍ {S°MemberExpressionÍ YÍ jT®ThisExpressionÍ YÍ ]MªIdentifierÍ ^Í j¬crowdForSpotÂÂ’MªIdentifierÍ kÍ o¤spotMªIdentifierÍ qÍ z©snapshotsÂMªIdentifierÍ |Í ‹¯forecastPercentÂÂÀV¯ReturnStatementÍ ±Í ÛX®CallExpressionÍ ¸Í ÚS°MemberExpressionÍ ¸Í ÂMªIdentifierÍ ¸Í ¼¤MathMªIdentifierÍ ½Í Â¥roundÂÂ‘\°BinaryExpressionÍ ÃÍ ÙMªIdentifierÍ ÃÍ È¥total¡/S°MemberExpressionÍ ËÍ ÙMªIdentifierÍ ËÍ Ò§spotIdsMªIdentifierÍ ÓÍ Ù¦lengthÂÂÂO°MethodDefinitionÍ èÍ"ÂÂMªIdentifierÍ èÍ ú²interestMatchCount¦methodP²FunctionExpressionÍ úÍ"ÀÂÂÂ’MªIdentifierÍ ûÍ ÿ¤spotMªIdentifierÍ!Í!
+©interestsN®BlockStatementÍ!Í"“]³VariableDeclarationÍ!Í!%‘^²VariableDeclaratorÍ!Í!$MªIdentifierÍ!Í! ¥countY§LiteralÍ!#Í!$ ¡0£let_¬ForStatementÍ!/Í!ö]³VariableDeclarationÍ!4Í!D‘^²VariableDeclaratorÍ!8Í!DMªIdentifierÍ!8Í!@¨tagIndexY§LiteralÍ!CÍ!D ¡0£let\°BinaryExpressionÍ!FÍ!aMªIdentifierÍ!FÍ!N¨tagIndex¡<S°MemberExpressionÍ!QÍ!aMªIdentifierÍ!QÍ!Z©interestsMªIdentifierÍ![Í!a¦lengthÂÂ`°UpdateExpressionÍ!cÍ!m¢++ÂMªIdentifierÍ!cÍ!k¨tagIndexN®BlockStatementÍ!oÍ!ö‘a«IfStatementÍ!~Í!ë\°BinaryExpressionÍ!‚Í!µX®CallExpressionÍ!‚Í!°S°MemberExpressionÍ!‚Í!›S°MemberExpressionÍ!‚Í!“MªIdentifierÍ!‚Í!†¤spotMªIdentifierÍ!‡Í!“¬interestTagsÂÂMªIdentifierÍ!”Í!›§indexOfÂÂ‘S°MemberExpressionÍ!œÍ!¯MªIdentifierÍ!œÍ!¥©interestsMªIdentifierÍ!¦Í!®¨tagIndexÃÂÂ¢>=Y§LiteralÍ!´Í!µ ¡0N®BlockStatementÍ!·Í!ë‘Q³ExpressionStatementÍ!ÊÍ!ÜR´AssignmentExpressionÍ!ÊÍ!Û¡=MªIdentifierÍ!ÊÍ!Ï¥count\°BinaryExpressionÍ!ÒÍ!ÛMªIdentifierÍ!ÒÍ!×¥count¡+Y§LiteralÍ!ÚÍ!Û¡1ÀV¯ReturnStatementÍ" Í"MªIdentifierÍ"Í"¥countO°MethodDefinitionÍ"Í"pÂÂMªIdentifierÍ"Í"(®containsSpotId¦methodP²FunctionExpressionÍ"(Í"pÀÂÂÂ’MªIdentifierÍ")Í"0§spotIdsMªIdentifierÍ"2Í"8¦spotIdN®BlockStatementÍ":Í"p‘V¯ReturnStatementÍ"EÍ"i\°BinaryExpressionÍ"LÍ"hX®CallExpressionÍ"LÍ"cS°MemberExpressionÍ"LÍ"[MªIdentifierÍ"LÍ"S§spotIdsMªIdentifierÍ"TÍ"[§indexOfÂÂ‘MªIdentifierÍ"\Í"b¦spotIdÂ¢>=Y§LiteralÍ"gÍ"h ¡0O°MethodDefinitionÍ"vÍ#^ÂÂMªIdentifierÍ"vÍ"~¨findSpot¦methodP²FunctionExpressionÍ"~Í#^ÀÂÂÂ’MªIdentifierÍ"Í"„¥spotsMªIdentifierÍ"†Í"Œ¦spotIdN®BlockStatementÍ"Í#^’_¬ForStatementÍ"™Í#<]³VariableDeclarationÍ"Í"«‘^²VariableDeclaratorÍ"¢Í"«MªIdentifierÍ"¢Í"§¥indexY§LiteralÍ"ªÍ"« ¡0£let\°BinaryExpressionÍ"­Í"ÁMªIdentifierÍ"­Í"²¥index¡<S°MemberExpressionÍ"µÍ"ÁMªIdentifierÍ"µÍ"º¥spotsMªIdentifierÍ"»Í"Á¦lengthÂÂ`°UpdateExpressionÍ"ÃÍ"Ê¢++ÂMªIdentifierÍ"ÃÍ"È¥indexN®BlockStatementÍ"ÌÍ#<‘a«IfStatementÍ"ÛÍ#1\°BinaryExpressionÍ"ßÍ"ùS°MemberExpressionÍ"ßÍ"îS°MemberExpressionÍ"ßÍ"ëMªIdentifierÍ"ßÍ"ä¥spotsMªIdentifierÍ"åÍ"ê¥indexÃÂMªIdentifierÍ"ìÍ"î¢idÂÂ£===MªIdentifierÍ"óÍ"ù¦spotIdN®BlockStatementÍ"ûÍ#1‘V¯ReturnStatementÍ#Í#"S°MemberExpressionÍ#Í#!MªIdentifierÍ#Í#¥spotsMªIdentifierÍ#Í# ¥indexÃÂÀV¯ReturnStatementÍ#FÍ#WMªIdentifierÍ#MÍ#V©undefinedÀ‘Ôrf•¤type¥start£endªspecifiers¦source±ImportDeclaration <‘Ôrg•¤type¥start£end¨imported¥local¯ImportSpecifier	MªIdentifier	°ScenicRepositoryMªIdentifier	°ScenicRepositoryY§Literal!;¸../data/ScenicRepositoryº'../data/ScenicRepository'
