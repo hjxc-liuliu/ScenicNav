@@ -8,7 +8,7 @@ servers:
 paths:
   /auth/login:
     post:
-      summary: 演示账号登录
+      summary: 用户登录
       responses:
         '200': { $ref: '#/components/responses/Success' }
   /tickets:

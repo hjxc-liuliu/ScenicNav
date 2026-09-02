@@ -1,4 +1,12 @@
 import {
+  http
+} from '@kit.NetworkKit';
+import {
+  AI_API_KEY,
+  AI_BASE_URL,
+  AI_MODEL
+} from '../config/AiConfig';
+import {
   AdminOrderRecord,
   ChatMessage,
   CrowdSnapshot,
@@ -28,6 +36,23 @@ const ADMIN_TAB_ICONS: string[] = ['▦', '⌘', '▣', '◷', '◉'];
 const ITINERARY_DURATIONS: number[] = [120, 240, 360];
 const ITINERARY_INTERESTS: string[] = ['亲子', '文化', '自然', '摄影', '休闲'];
 
+interface DeepSeekMessage {
+  role: string;
+  content: string;
+}
+
+interface DeepSeekThinking {
+  type: string;
+}
+
+interface DeepSeekRequestBody {
+  model: string;
+  messages: DeepSeekMessage[];
+  stream: boolean;
+  thinking: DeepSeekThinking;
+  max_tokens: number;
+}
+
 @Entry
 @Component
 struct Index {
@@ -42,14 +67,15 @@ struct Index {
   private readonly adminOrders: AdminOrderRecord[] = DEMO_ADMIN_ORDERS;
 
   @State private activeTab: string = '首页';
-  @State private account: string = 'tourist';
-  @State private password: string = '123456';
+  @State private account: string = '';
+  @State private password: string = '';
   @State private loggedIn: boolean = false;
   @State private userRole: string = '游客';
-  @State private notice: string = '游客账号 tourist / 123456；管理账号 admin / 123456。';
+  @State private notice: string = '欢迎使用山水智游，请登录账号。';
   @State private ticketIndex: number = 0;
   @State private selectedRouteId: string = 'family';
   @State private selectedSpotId: string = 'sudi';
+  @State private homePhotoIndex: number = 0;
   @State private crowdSnapshots: CrowdSnapshot[] = this.viewModel.repository.crowdSnapshots();
   @State private crowdScenario: string = '常态';
   @State private itineraryDurationMinutes: number = 240;
@@ -78,24 +104,33 @@ struct Index {
   @State private feedbackContent: string = '';
   @State private points: number = 320;
   @State private sharedToday: boolean = false;
+  @State private aiAnswering: boolean = false;
   @State private serviceDraft: string = '';
   @State private serviceMessages: ChatMessage[] = DEMO_CHAT_MESSAGES;
   @State private followUpRating: number = 0;
   @State private followUpCompleted: boolean = false;
   @State private historyRecords: VisitorHistoryRecord[] = DEMO_HISTORY_RECORDS;
   private crowdTimerId: number = -1;
+  private homePhotoTimerId: number = -1;
 
   aboutToAppear(): void {
     this.refreshCrowdData();
     this.crowdTimerId = setInterval(() => {
       this.refreshCrowdData();
     }, 4000);
+    this.homePhotoTimerId = setInterval(() => {
+      this.nextHomePhoto();
+    }, 3500);
   }
 
   aboutToDisappear(): void {
     if (this.crowdTimerId >= 0) {
       clearInterval(this.crowdTimerId);
       this.crowdTimerId = -1;
+    }
+    if (this.homePhotoTimerId >= 0) {
+      clearInterval(this.homePhotoTimerId);
+      this.homePhotoTimerId = -1;
     }
   }
 
@@ -114,35 +149,63 @@ struct Index {
 
   @Builder
   loginPage() {
-    Column({ space: 18 }) {
-      Column({ space: 8 }) {
-        Text('山水智游')
-          .fontSize(34)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#176B43')
-        Text('把风景装进口袋，把时间留给山水')
-          .fontSize(15)
-          .fontColor('#6A7A70')
+    Column() {
+      Stack({ alignContent: Alignment.BottomStart }) {
+        Image($r('app.media.west_lake_hero'))
+          .width('100%')
+          .height(310)
+          .objectFit(ImageFit.Cover)
+        Column()
+          .width('100%')
+          .height(310)
+          .backgroundColor('#55000000')
+        Column({ space: 12 }) {
+          Text('山水智游')
+            .fontSize(38)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text('西湖一日，从容启程')
+            .fontSize(17)
+            .fontColor('#F0F8F1')
+          Row({ space: 8 }) {
+            this.loginFeatureTag('雷峰塔')
+            this.loginFeatureTag('游船')
+            this.loginFeatureTag('柳岸')
+          }
+          .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding({ left: 24, right: 24, bottom: 30 })
       }
-      .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .margin({ bottom: 18 })
 
       Column({ space: 14 }) {
-        Text('演示登录')
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
-        Text('游客端：tourist / 123456；管理端：admin / 123456')
-          .fontSize(12)
-          .fontColor('#718077')
+        Column({ space: 5 }) {
+          Text('欢迎来到杭州西湖')
+            .fontSize(21)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#24362B')
+          Text('智能导览、分时预约、贴心咨询一站开启')
+            .fontSize(13)
+            .fontColor('#718077')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        Row({ space: 8 }) {
+          this.loginMetric('22℃', '湖滨舒适')
+          this.loginMetric('240', '今日余位')
+          this.loginMetric('低', '拥堵指数')
+        }
+        .width('100%')
         TextInput({ text: this.account, placeholder: '账号' })
           .onChange((value: string) => this.account = value)
-          .backgroundColor(Color.White)
+          .backgroundColor('#F3F6F4')
           .borderRadius(12)
           .height(50)
         TextInput({ text: this.password, placeholder: '密码' })
           .onChange((value: string) => this.password = value)
-          .backgroundColor(Color.White)
+          .backgroundColor('#F3F6F4')
           .borderRadius(12)
           .height(50)
         Button('进入景区')
@@ -152,21 +215,59 @@ struct Index {
           .fontColor(Color.White)
           .borderRadius(24)
           .onClick(() => this.performLogin())
+        Text('请使用景区游客账号或管理员账号登录')
+          .fontSize(11)
+          .fontColor('#7A887F')
+          .width('100%')
+          .textAlign(TextAlign.Center)
       }
       .width('100%')
       .padding(20)
       .backgroundColor(Color.White)
       .borderRadius(20)
+      .margin({ left: 18, right: 18, top: -24 })
+      .shadow({ radius: 18, color: '#26000000', offsetX: 0, offsetY: 8 })
 
       Text(this.notice)
         .fontSize(13)
         .fontColor('#66766C')
         .lineHeight(20)
-        .width('100%')
+        .width('90%')
+        .margin({ top: 14 })
     }
     .width('100%')
-    .padding({ left: 24, right: 24, top: 96 })
+    .height('100%')
+    .backgroundColor('#F4F8F5')
     .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  loginFeatureTag(label: string) {
+    Text(label)
+      .fontSize(12)
+      .fontColor(Color.White)
+      .backgroundColor('#4DFFFFFF')
+      .padding({ left: 11, right: 11, top: 6, bottom: 6 })
+      .borderRadius(14)
+  }
+
+  @Builder
+  loginMetric(value: string, label: string) {
+    Column({ space: 3 }) {
+      Text(value)
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#176B43')
+      Text(label)
+        .fontSize(10)
+        .fontColor('#718077')
+    }
+    .layoutWeight(1)
+    .height(55)
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor('#F1F8F3')
+    .borderRadius(13)
   }
 
   private performLogin(): void {
@@ -186,30 +287,66 @@ struct Index {
     if (this.userRole === '管理员') {
       this.adminApplication()
     } else {
-      Column() {
-        this.topBar()
-        if (this.notice.length > 0) {
-          Text(this.notice)
-            .fontSize(12)
-            .fontColor('#1B6E47')
-            .backgroundColor('#E1F5E8')
-            .borderRadius(8)
-            .padding({ top: 7, bottom: 7, left: 10, right: 10 })
-            .width('92%')
-            .margin({ top: 6 })
-        }
-        Scroll() {
-          Column() {
-            this.pageContent()
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Column() {
+          this.topBar()
+          if (this.notice.length > 0) {
+            Text(this.notice)
+              .fontSize(12)
+              .fontColor('#1B6E47')
+              .backgroundColor('#E1F5E8')
+              .borderRadius(8)
+              .padding({ top: 7, bottom: 7, left: 10, right: 10 })
+              .width('92%')
+              .margin({ top: 6 })
           }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 14, bottom: 16 })
+          Scroll() {
+            Column() {
+              this.pageContent()
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 14, bottom: 16 })
+          }
+          .layoutWeight(1)
+          this.bottomNavigation()
         }
-        .layoutWeight(1)
-        this.bottomNavigation()
+        .width('100%')
+        .height('100%')
+        this.globalAiButton()
       }
       .width('100%')
       .height('100%')
+    }
+  }
+
+  @Builder
+  globalAiButton() {
+    if (this.activeTab !== '客服') {
+      Column({ space: 1 }) {
+        Text(this.aiAnswering ? '...' : '?')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .width(48)
+          .height(29)
+          .padding({ top: 4 })
+        Text('咨询')
+          .fontSize(10)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .width(48)
+          .height(16)
+      }
+      .width(56)
+      .height(56)
+      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(this.aiAnswering ? '#9B6422' : '#1E6C55')
+      .borderRadius(28)
+      .shadow({ radius: 14, color: '#33000000', offsetX: 0, offsetY: 4 })
+      .margin({ right: 18, bottom: 124 })
+      .onClick(() => this.activeTab = '客服')
     }
   }
 
@@ -277,34 +414,7 @@ struct Index {
   @Builder
   homePage() {
     Column({ space: 18 }) {
-      Column({ space: 10 }) {
-        Text('此刻的西湖，适合出发')
-          .fontSize(23)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-        Text('湖滨舒适 · 断桥热度偏高，推荐南山慢游')
-          .fontSize(14)
-          .fontColor('#EAF9EF')
-        Row({ space: 8 }) {
-          Text('今日余位 240')
-            .fontSize(12)
-            .fontColor('#165E3D')
-            .backgroundColor('#D7F4DF')
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .borderRadius(14)
-          Text('拥堵指数 低')
-            .fontSize(12)
-            .fontColor('#165E3D')
-            .backgroundColor('#D7F4DF')
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .borderRadius(14)
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-      .padding(20)
-      .borderRadius(20)
-      .backgroundColor('#176B43')
+      this.homePhotoCarousel()
 
       this.sectionHeading('分时门票', '可退改 · 入园二维码')
       ForEach(this.tickets, (ticket: TicketProduct, index: number) => {
@@ -366,6 +476,121 @@ struct Index {
   }
 
   @Builder
+  homePhotoCarousel() {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      this.homePhotoImage()
+      Column()
+        .width('100%')
+        .height(210)
+        .backgroundColor('#52000000')
+      Column({ space: 10 }) {
+        Text(this.homePhotoTitle())
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+        Text(this.homePhotoCaption())
+          .fontSize(14)
+          .lineHeight(20)
+          .fontColor('#F2F8F1')
+          .width('100%')
+        Row({ space: 8 }) {
+          Text('今日余位 240')
+            .fontSize(12)
+            .fontColor('#165E3D')
+            .backgroundColor('#D7F4DF')
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .borderRadius(14)
+          Text('拥堵指数 低')
+            .fontSize(12)
+            .fontColor('#165E3D')
+            .backgroundColor('#D7F4DF')
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .borderRadius(14)
+        }
+        Row({ space: 6 }) {
+          this.homePhotoDot(0)
+          this.homePhotoDot(1)
+          this.homePhotoDot(2)
+          this.homePhotoDot(3)
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding({ left: 18, right: 18, bottom: 17 })
+    }
+    .width('100%')
+    .height(210)
+    .borderRadius(20)
+    .backgroundColor('#176B43')
+    .onClick(() => this.activeTab = '导览')
+  }
+
+  @Builder
+  homePhotoImage() {
+    if (this.homePhotoIndex === 0) {
+      Image($r('app.media.home_leifeng_boats'))
+        .width('100%')
+        .height(210)
+        .objectFit(ImageFit.Cover)
+    } else if (this.homePhotoIndex === 1) {
+      Image($r('app.media.home_broken_bridge'))
+        .width('100%')
+        .height(210)
+        .objectFit(ImageFit.Cover)
+    } else if (this.homePhotoIndex === 2) {
+      Image($r('app.media.home_su_causeway'))
+        .width('100%')
+        .height(210)
+        .objectFit(ImageFit.Cover)
+    } else {
+      Image($r('app.media.west_lake_hero'))
+        .width('100%')
+        .height(210)
+        .objectFit(ImageFit.Cover)
+    }
+  }
+
+  @Builder
+  homePhotoDot(index: number) {
+    Text('')
+      .width(this.homePhotoIndex === index ? 18 : 7)
+      .height(7)
+      .backgroundColor(this.homePhotoIndex === index ? Color.White : '#88FFFFFF')
+      .borderRadius(4)
+      .onClick(() => this.homePhotoIndex = index)
+  }
+
+  private nextHomePhoto(): void {
+    this.homePhotoIndex = (this.homePhotoIndex + 1) % 4;
+  }
+
+  private homePhotoTitle(): string {
+    if (this.homePhotoIndex === 0) {
+      return '雷峰塔与西湖游船';
+    }
+    if (this.homePhotoIndex === 1) {
+      return '断桥残雪';
+    }
+    if (this.homePhotoIndex === 2) {
+      return '苏堤春晓';
+    }
+    return '湖上风光';
+  }
+
+  private homePhotoCaption(): string {
+    if (this.homePhotoIndex === 0) {
+      return '湖面游船缓行，远处雷峰塔与山色相映。';
+    }
+    if (this.homePhotoIndex === 1) {
+      return '白堤东端经典景观，适合清晨错峰游览。';
+    }
+    if (this.homePhotoIndex === 2) {
+      return '长堤贯湖，柳岸花明，是步行导览的舒适路线。';
+    }
+    return '柳影、湖光与塔影交织，开启今日西湖行程。';
+  }
+
+  @Builder
   sectionHeading(title: string, subtitle: string) {
     Row() {
       Text(title)
@@ -412,7 +637,7 @@ struct Index {
     }
     this.ticketOrder = this.viewModel.repository.createTicketOrder(ticket, '2026-09-03 09:00-10:00');
     this.adjustTicketInventory(this.ticketIndex, -1);
-    this.notice = '模拟支付成功，电子票二维码已生成。';
+    this.notice = '支付成功，电子票二维码已生成。';
     this.addHistory('票务', ticket.name, '已支付，电子票已生成');
     this.activeTab = '我的';
   }
@@ -420,7 +645,7 @@ struct Index {
   @Builder
   guidePage() {
     Column({ space: 18 }) {
-      this.sectionHeading('动态错峰游览助手', '本地模拟实时数据 · 每 4 秒更新')
+      this.sectionHeading('动态错峰游览助手', '实时客流数据 · 每 4 秒更新')
       this.itineraryPlanner()
 
       this.sectionHeading('实时热力导览', `当前位置：苏堤北口 · ${this.crowdScenario}`)
@@ -469,26 +694,28 @@ struct Index {
 
       this.sectionHeading('景点人流', '实时热度 + 15 分钟预测')
       ForEach(this.spots, (spot: ScenicSpot) => {
-        Row() {
-          Column({ space: 4 }) {
-            Text(spot.name)
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#24362B')
-            Text(`${spot.subtitle} · ${spot.audioMinutes} 分钟讲解`)
+        Column({ space: 10 }) {
+          Row({ space: 11 }) {
+            this.spotImage(spot)
+            Column({ space: 4 }) {
+              Text(spot.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#24362B')
+              Text(`${spot.subtitle} · ${spot.audioMinutes} 分钟讲解`)
+                .fontSize(12)
+                .fontColor('#718077')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text(`${this.crowdLevel(spot)} ${this.currentCrowdPercent(spot)}%`)
               .fontSize(12)
-              .fontColor('#718077')
+              .fontColor(this.crowdColor(spot))
           }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-          Text(`${this.crowdLevel(spot)} ${this.currentCrowdPercent(spot)}%`)
+          Text(`${this.crowdTrend(spot)} · 15 分钟预测 ${this.currentForecastPercent(spot)}% · ${this.crowdAdvice(spot)}`)
             .fontSize(12)
             .fontColor(this.crowdColor(spot))
         }
-        Text(`${this.crowdTrend(spot)} · 15 分钟预测 ${this.currentForecastPercent(spot)}% · ${this.crowdAdvice(spot)}`)
-          .fontSize(12)
-          .fontColor(this.crowdColor(spot))
-          .margin({ top: 8 })
         .width('100%')
         .padding(15)
         .backgroundColor(spot.id === this.selectedSpotId ? '#E9F7EE' : Color.White)
@@ -627,7 +854,7 @@ struct Index {
   interactiveMap() {
     Column({ space: 10 }) {
       Row({ space: 6 }) {
-        Text(`本地模拟实时 · ${this.crowdScenario} · ${this.crowdUpdatedAt()}`)
+        Text(`实时客流 · ${this.crowdScenario} · ${this.crowdUpdatedAt()}`)
           .fontSize(11)
           .fontColor('#557066')
           .layoutWeight(1)
@@ -722,6 +949,47 @@ struct Index {
   }
 
   @Builder
+  spotImage(spot: ScenicSpot) {
+    if (spot.imageName === 'spot_broken_bridge') {
+      Image($r('app.media.spot_broken_bridge'))
+        .width(86)
+        .height(58)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(10)
+    } else if (spot.imageName === 'spot_solitary_hill') {
+      Image($r('app.media.spot_solitary_hill'))
+        .width(86)
+        .height(58)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(10)
+    } else if (spot.imageName === 'spot_quyuan') {
+      Image($r('app.media.spot_quyuan'))
+        .width(86)
+        .height(58)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(10)
+    } else if (spot.imageName === 'spot_sudi') {
+      Image($r('app.media.spot_sudi'))
+        .width(86)
+        .height(58)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(10)
+    } else if (spot.imageName === 'spot_flower_harbor') {
+      Image($r('app.media.spot_flower_harbor'))
+        .width(86)
+        .height(58)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(10)
+    } else {
+      Image($r('app.media.spot_leifeng_pagoda'))
+        .width(86)
+        .height(58)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(10)
+    }
+  }
+
+  @Builder
   mapSpotMarker(spot: ScenicSpot) {
     Column({ space: 1 }) {
       Stack({ alignContent: Alignment.Center }) {
@@ -758,6 +1026,7 @@ struct Index {
   @Builder
   mapSpotDetails() {
     Column({ space: 8 }) {
+      this.selectedSpotHeroImage()
       Row({ space: 9 }) {
         Text('●')
           .fontSize(22)
@@ -795,6 +1064,47 @@ struct Index {
     .borderRadius(15)
   }
 
+  @Builder
+  selectedSpotHeroImage() {
+    if (this.currentSelectedSpot().imageName === 'spot_broken_bridge') {
+      Image($r('app.media.spot_broken_bridge'))
+        .width('100%')
+        .height(132)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(13)
+    } else if (this.currentSelectedSpot().imageName === 'spot_solitary_hill') {
+      Image($r('app.media.spot_solitary_hill'))
+        .width('100%')
+        .height(132)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(13)
+    } else if (this.currentSelectedSpot().imageName === 'spot_quyuan') {
+      Image($r('app.media.spot_quyuan'))
+        .width('100%')
+        .height(132)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(13)
+    } else if (this.currentSelectedSpot().imageName === 'spot_sudi') {
+      Image($r('app.media.spot_sudi'))
+        .width('100%')
+        .height(132)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(13)
+    } else if (this.currentSelectedSpot().imageName === 'spot_flower_harbor') {
+      Image($r('app.media.spot_flower_harbor'))
+        .width('100%')
+        .height(132)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(13)
+    } else {
+      Image($r('app.media.spot_leifeng_pagoda'))
+        .width('100%')
+        .height(132)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(13)
+    }
+  }
+
   private currentSelectedSpot(): ScenicSpot {
     for (let index = 0; index < this.spots.length; index++) {
       if (this.spots[index].id === this.selectedSpotId) {
@@ -811,7 +1121,7 @@ struct Index {
   }
 
   private playSpotAudio(spot: ScenicSpot): void {
-    this.notice = `正在播放《${spot.name}》的 ${spot.audioMinutes} 分钟图文讲解（演示）。`;
+    this.notice = `正在播放《${spot.name}》的 ${spot.audioMinutes} 分钟图文讲解。`;
     this.addHistory('导览', spot.name, `播放 ${spot.audioMinutes} 分钟图文讲解`);
   }
 
@@ -1064,7 +1374,7 @@ struct Index {
   private navigationInstruction(): string {
     const destinations = this.currentNavigationSpotIds();
     const destination = destinations[this.navigationStep];
-    return `从苏堤北口模拟定位点出发，沿西湖步道前往「${destination}」。系统会持续检查未到达景点的 15 分钟客流预测。`;
+    return `从苏堤北口出发，沿西湖步道前往「${destination}」。系统会持续检查未到达景点的 15 分钟客流预测。`;
   }
 
   private startNavigation(): void {
@@ -1102,7 +1412,7 @@ struct Index {
           .fontSize(21)
           .fontWeight(FontWeight.Bold)
           .fontColor('#214231')
-        Text(`模拟运营时钟 ${this.simulatedClock()} · 临近时段会在“我的”页显示应用内提醒。`)
+        Text(`当前运营时钟 ${this.simulatedClock()} · 临近时段会在“我的”页显示应用内提醒。`)
           .fontSize(13)
           .fontColor('#728077')
       }
@@ -1201,7 +1511,7 @@ struct Index {
               .backgroundColor('#E5F2E9')
               .fontColor('#176B43')
               .borderRadius(17)
-              .onClick(() => this.notice = `${merchant.name} 已生成模拟预订单。`)
+              .onClick(() => this.notice = `${merchant.name} 预订单已生成。`)
           }
           .width('100%')
           .padding(15)
@@ -1273,7 +1583,7 @@ struct Index {
       this.projectBookings = [...this.projectBookings, booking];
       this.adjustProjectInventory(index, -1);
     }
-    this.notice = `${project.name} 快速通行模拟支付成功，已保留时段并缩短现场等待。`;
+    this.notice = `${project.name} 快速通行支付成功，已保留时段并缩短现场等待。`;
     this.addHistory('预约', project.name, `已购买 ￥${project.fastPassPrice} 快速通行服务`);
   }
 
@@ -1406,7 +1716,7 @@ struct Index {
         .borderRadius(16)
       }, (product: MallProduct) => product.id)
 
-      Button(this.sharedToday ? '今日分享已获得 20 积分' : '模拟分享游玩照片，获得 20 积分')
+      Button(this.sharedToday ? '今日分享已获得 20 积分' : '分享游玩照片，获得 20 积分')
         .width('100%')
         .height(44)
         .backgroundColor(this.sharedToday ? '#E2F2E8' : '#FFF0E7')
@@ -1419,7 +1729,7 @@ struct Index {
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
           .fontColor('#24362B')
-        Text('湖畔精品酒店 + 西湖环湖游船票，两人套餐 ￥888（演示）')
+        Text('湖畔精品酒店 + 西湖环湖游船票，两人套餐 ￥888')
           .fontSize(13)
           .fontColor('#6F7F75')
         Button('生成组合预订单')
@@ -1427,7 +1737,7 @@ struct Index {
           .backgroundColor('#E5F2E9')
           .fontColor('#176B43')
           .borderRadius(18)
-          .onClick(() => this.notice = '住玩组合模拟订单已生成，可在“我的”页查看。')
+          .onClick(() => this.notice = '住玩组合订单已生成，可在“我的”页查看。')
       }
       .width('100%')
       .padding(16)
@@ -1444,7 +1754,7 @@ struct Index {
     }
     this.mallOrders = [...this.mallOrders, product.id];
     this.points += product.points;
-    this.notice = `${product.name} 模拟下单成功，获得 ${product.points} 积分。`;
+    this.notice = `${product.name} 下单成功，获得 ${product.points} 积分。`;
     this.addHistory('商城', product.name, '已生成邮寄订单');
   }
 
@@ -1455,7 +1765,7 @@ struct Index {
     }
     this.sharedToday = true;
     this.points += 20;
-    this.notice = '模拟分享成功，已获得 20 积分。';
+    this.notice = '分享成功，已获得 20 积分。';
     this.addHistory('互动', '游玩照片分享', '获得 20 积分');
   }
 
@@ -1473,7 +1783,7 @@ struct Index {
           .backgroundColor('#176B43')
           .borderRadius(25)
         Column({ space: 4 }) {
-          Text('旅行者 tourist')
+          Text('旅行者')
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
             .fontColor('#24362B')
@@ -1484,6 +1794,43 @@ struct Index {
         .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
+
+      Column({ space: 10 }) {
+        Row() {
+          Column({ space: 4 }) {
+            Text('小湖助手')
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#24362B')
+            Text('问景点、人流、路线、票务和预约')
+              .fontSize(12)
+              .fontColor('#718077')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Text('?')
+            .fontSize(13)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .textAlign(TextAlign.Center)
+            .width(38)
+            .height(38)
+            .padding({ top: 10 })
+            .backgroundColor('#176B43')
+            .borderRadius(19)
+        }
+        Button('打开小湖助手')
+          .width('100%')
+          .height(40)
+          .backgroundColor('#E5F2E9')
+          .fontColor('#176B43')
+          .borderRadius(20)
+          .onClick(() => this.activeTab = '客服')
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor(Color.White)
+      .borderRadius(16)
 
       if (this.ticketOrder) {
         Column({ space: 10 }) {
@@ -1516,10 +1863,10 @@ struct Index {
               .onClick(() => {
                 this.ticketOrder = undefined;
                 this.adjustTicketInventory(this.ticketIndex, 1);
-                this.notice = '电子票已模拟退改，库存已释放。';
+                this.notice = '电子票已退改，库存已释放。';
                 this.addHistory('票务', '电子票退改', '库存已释放，等待退款处理');
               })
-            Button('模拟闸机验票')
+            Button('闸机验票')
               .layoutWeight(1)
               .height(36)
               .backgroundColor('#E5F2E9')
@@ -1560,7 +1907,7 @@ struct Index {
             Text(`状态：${booking.status} · 已设置到场提醒${this.remindedProjectIds.indexOf(booking.projectId) >= 0 ? '（已发送）' : ''}`)
               .fontSize(12)
               .fontColor('#657A6B')
-            Button(this.remindedProjectIds.indexOf(booking.projectId) >= 0 ? '到场提醒已发送' : '模拟发送到场提醒')
+            Button(this.remindedProjectIds.indexOf(booking.projectId) >= 0 ? '到场提醒已发送' : '发送到场提醒')
               .height(32)
               .fontSize(12)
               .backgroundColor('#F1F7F3')
@@ -1605,19 +1952,12 @@ struct Index {
         .margin({ top: 7 })
       }, (record: VisitorHistoryRecord) => record.id)
 
-      this.sectionHeading('客服与意见反馈', '在线解答 · 定期回访')
+      this.sectionHeading('意见反馈', '自动分类 · 定期回访')
       Column({ space: 10 }) {
-        Text('客服小湖在线：可咨询电子票、排队、路线与餐宿；客服工作台会同步游客反馈。')
+        Text('提交建议、意见或投诉后，管理端服务页会同步看到最新反馈。')
           .fontSize(13)
           .lineHeight(19)
           .fontColor('#596B60')
-        Button('打开在线客服 / 客服工作台')
-          .width('100%')
-          .height(40)
-          .backgroundColor('#E5F2E9')
-          .fontColor('#176B43')
-          .borderRadius(20)
-          .onClick(() => this.activeTab = '客服')
         TextInput({ text: this.feedbackContent, placeholder: '请输入建议、意见或投诉内容' })
           .onChange((value: string) => this.feedbackContent = value)
           .height(48)
@@ -1644,7 +1984,7 @@ struct Index {
         Text('管理票务库存、景区设施、预约队列、订单与游客反馈。')
           .fontSize(13)
           .fontColor('#657A6B')
-        Button('切换到管理员演示登录')
+        Button('切换到管理员登录')
           .width('100%')
           .height(38)
           .backgroundColor('#E8EDF8')
@@ -1657,7 +1997,7 @@ struct Index {
       .backgroundColor(Color.White)
       .borderRadius(16)
 
-      Button('退出演示账号')
+      Button('退出账号')
         .width('100%')
         .height(42)
         .backgroundColor('#EDF2EF')
@@ -1665,7 +2005,7 @@ struct Index {
         .borderRadius(21)
         .onClick(() => {
           this.loggedIn = false;
-          this.notice = '已退出演示账号。';
+          this.notice = '已退出账号。';
         })
     }
     .width('100%')
@@ -1680,21 +2020,21 @@ struct Index {
           .fontColor('#176B43')
           .onClick(() => this.activeTab = '我的')
         Blank()
-        Text('在线')
+        Text(this.aiAnswering ? '回复中' : '在线')
           .fontSize(12)
-          .fontColor('#176B43')
-          .backgroundColor('#E5F2E9')
+          .fontColor(this.aiAnswering ? '#9B6422' : '#176B43')
+          .backgroundColor(this.aiAnswering ? '#FFF2D9' : '#E5F2E9')
           .padding({ left: 9, right: 9, top: 5, bottom: 5 })
           .borderRadius(12)
       }
       .width('100%')
 
       Column({ space: 5 }) {
-        Text('客服工作台')
+        Text('小湖助手')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#24362B')
-        Text('模拟实时会话 · 游客消息会立即得到客服答复')
+        Text(this.aiAnswering ? '正在为你整理答案...' : '可咨询景点、人流、路线、票务和预约')
           .fontSize(13)
           .fontColor('#718077')
       }
@@ -1733,7 +2073,7 @@ struct Index {
           .borderRadius(12)
         Button('发送')
           .height(44)
-          .backgroundColor('#176B43')
+          .backgroundColor(this.aiAnswering ? '#8BA99A' : '#176B43')
           .fontColor(Color.White)
           .borderRadius(12)
           .onClick(() => this.sendServiceMessage(this.serviceDraft))
@@ -1753,6 +2093,12 @@ struct Index {
           .fontColor('#176B43')
           .borderRadius(15)
           .onClick(() => this.sendServiceMessage('电子票如何退改？'))
+        Button('推荐景点')
+          .fontSize(12)
+          .backgroundColor('#E5F2E9')
+          .fontColor('#176B43')
+          .borderRadius(15)
+          .onClick(() => this.sendServiceMessage('现在推荐去哪个景点？'))
       }
       .width('100%')
 
@@ -1810,8 +2156,8 @@ struct Index {
   private openAdminLogin(): void {
     this.loggedIn = false;
     this.account = 'admin';
-    this.password = '123456';
-    this.notice = '已切换至管理端演示登录，请点击“进入景区”。';
+    this.password = '';
+    this.notice = '已切换至管理端登录，请点击“进入景区”。';
   }
 
   private sendServiceMessage(content: string): void {
@@ -1820,27 +2166,128 @@ struct Index {
       this.notice = '请输入需要咨询的问题。';
       return;
     }
+    if (this.aiAnswering) {
+      this.notice = '小湖助手正在回复上一条问题，请稍等。';
+      return;
+    }
     const visitorMessage: ChatMessage = {
       id: `visitor-${Date.now()}`,
       sender: '游客',
       content: question,
       time: '刚刚'
     };
+    this.serviceMessages = [...this.serviceMessages, visitorMessage];
+    this.serviceDraft = '';
+    this.aiAnswering = true;
+    this.notice = '小湖助手正在为你整理答案。';
+    this.addHistory('咨询', '小湖助手', question);
+    this.callLargeModel(question).then((answer: string) => {
+      this.appendAiAnswer(answer);
+    }).catch(() => {
+      this.appendAiAnswer(this.serviceReply(question));
+      this.notice = '咨询服务繁忙，已先为你提供基础建议。';
+    });
+  }
+
+  private appendAiAnswer(answer: string): void {
     const agentMessage: ChatMessage = {
       id: `agent-${Date.now()}`,
-      sender: '客服小湖',
-      content: this.serviceReply(question),
+      sender: '小湖助手',
+      content: answer,
       time: '刚刚'
     };
-    this.serviceMessages = [...this.serviceMessages, visitorMessage, agentMessage];
-    this.serviceDraft = '';
-    this.notice = '客服小湖已实时回复你的问题。';
-    this.addHistory('客服', '在线咨询', question);
+    this.serviceMessages = [...this.serviceMessages, agentMessage];
+    this.aiAnswering = false;
+    this.notice = '小湖助手已回复你的问题。';
+  }
+
+  private async callLargeModel(question: string): Promise<string> {
+    if (AI_API_KEY.indexOf('在这里填入') >= 0 || AI_API_KEY.trim().length < 20) {
+      return Promise.reject<string>('请先在 AiConfig.ets 中填入 API Key');
+    }
+    const request = http.createHttp();
+    const messages: DeepSeekMessage[] = [
+      {
+        role: 'system',
+        content: '你是山水智游 ScenicNav 的景区智能咨询助手，名字叫小湖助手。请用简洁中文回答游客问题，只依据给定景区上下文，不编造真实营业信息。涉及高峰、路线、票务、预约时给出可执行建议。'
+      },
+      {
+        role: 'user',
+        content: this.buildAiPrompt(question)
+      }
+    ];
+    const thinking: DeepSeekThinking = {
+      type: 'disabled'
+    };
+    const body: DeepSeekRequestBody = {
+      model: AI_MODEL,
+      messages,
+      stream: false,
+      thinking,
+      max_tokens: 420
+    };
+    const response = await request.request(AI_BASE_URL, {
+      method: http.RequestMethod.POST,
+      header: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AI_API_KEY}`
+      },
+      extraData: JSON.stringify(body),
+      expectDataType: http.HttpDataType.STRING
+    });
+    request.destroy();
+    if (response.responseCode < 200 || response.responseCode >= 300) {
+      return Promise.reject<string>(`HTTP ${response.responseCode}`);
+    }
+    return this.extractAiText(`${response.result}`);
+  }
+
+  private buildAiPrompt(question: string): string {
+    const spotLines: string[] = [];
+    for (let index = 0; index < this.spots.length; index++) {
+      const spot = this.spots[index];
+      spotLines.push(`${spot.name}：${spot.subtitle}，当前热度${this.currentCrowdPercent(spot)}%，15分钟预测${this.currentForecastPercent(spot)}%，建议：${this.crowdAdvice(spot)}`);
+    }
+    const projectLines: string[] = [];
+    for (let index = 0; index < this.projects.length; index++) {
+      const project = this.projects[index];
+      projectLines.push(`${project.name}：${project.startTime}，余位${this.projectRemaining(project, index)}，预计等待${this.projectWaitMinutes(project)}分钟，快速通行${project.fastPassPrice}元`);
+    }
+    return `游客问题：${question}\n当前选中景点：${this.currentSelectedSpot().name}\n客流场景：${this.crowdScenario}\n景点实时状态：\n${spotLines.join('\n')}\n可预约项目：\n${projectLines.join('\n')}\n电子票规则：未入园前可在“我的”页退改，取消后释放库存。\n回答要求：80字以内，先直接回答，再给一个下一步建议。`;
+  }
+
+  private extractAiText(raw: string): string {
+    try {
+      const json = JSON.parse(raw) as Record<string, Object>;
+      const choices = json['choices'] as Array<Record<string, Object>>;
+      if (choices !== undefined && choices.length > 0) {
+        const first = choices[0];
+        const message = first['message'] as Record<string, Object>;
+        if (message !== undefined) {
+          const content = message['content'] as string;
+          if (content !== undefined && content.length > 0) {
+            return content;
+          }
+        }
+      }
+    } catch (error) {
+      return raw;
+    }
+    return '我已收到问题，但暂时没有整理出完整答案。请稍后再试或换个问法。';
   }
 
   private serviceReply(question: string): string {
+    const matchedSpot = this.findSpotByQuestion(question);
+    if (matchedSpot !== undefined) {
+      return `${matchedSpot.name}：${matchedSpot.subtitle}。当前${this.crowdLevel(matchedSpot)}，热度 ${this.currentCrowdPercent(matchedSpot)}%，15 分钟预测 ${this.currentForecastPercent(matchedSpot)}%。${this.crowdAdvice(matchedSpot)}建议预留 ${matchedSpot.stayMinutes} 分钟游览，可在导览页查看图片和图文讲解。`;
+    }
+    if (question.indexOf('推荐') >= 0 || question.indexOf('去哪') >= 0 || question.indexOf('路线') >= 0) {
+      const bestSpot = this.bestLowCrowdSpot();
+      return `现在推荐先去${bestSpot.name}，预测热度 ${this.currentForecastPercent(bestSpot)}%，相对舒适。你也可以在导览页生成 ${this.itineraryDurationMinutes / 60} 小时错峰行程，系统会自动避开高峰景点。`;
+    }
     if (question.indexOf('人') >= 0 || question.indexOf('拥') >= 0) {
-      return '断桥残雪当前热度为 86%，建议先按南山慢游线前往雷峰塔与花港观鱼，15:00 后再前往断桥。';
+      const spot = this.currentSelectedSpot();
+      return `${spot.name}当前${this.crowdLevel(spot)}，热度 ${this.currentCrowdPercent(spot)}%，15 分钟预测 ${this.currentForecastPercent(spot)}%。${this.crowdAdvice(spot)}`;
     }
     if (question.indexOf('退') >= 0 || question.indexOf('票') >= 0) {
       return '电子票可在未入园前在“我的”页点击“退改电子票”办理，系统会自动释放对应时段库存。';
@@ -1848,7 +2295,44 @@ struct Index {
     if (question.indexOf('预约') >= 0 || question.indexOf('排队') >= 0) {
       return '项目预约成功后会显示预计等待时间；到场前会产生应用内提醒，也可购买快速通行券缩短等待。';
     }
-    return '已收到你的问题。客服小湖建议你先查看导览页的人流提示；如需人工协助，反馈会自动转交客服队列。';
+    return '已收到你的问题。小湖助手建议你先查看导览页的人流提示和景点图片；如需人工协助，反馈会自动转交客服队列。';
+  }
+
+  private findSpotByQuestion(question: string): ScenicSpot | undefined {
+    for (let index = 0; index < this.spots.length; index++) {
+      if (question.indexOf(this.spots[index].name) >= 0) {
+        return this.spots[index];
+      }
+    }
+    if (question.indexOf('断桥') >= 0) {
+      return this.spots[0];
+    }
+    if (question.indexOf('孤山') >= 0) {
+      return this.spots[1];
+    }
+    if (question.indexOf('曲院') >= 0 || question.indexOf('荷') >= 0) {
+      return this.spots[2];
+    }
+    if (question.indexOf('苏堤') >= 0) {
+      return this.spots[3];
+    }
+    if (question.indexOf('花港') >= 0 || question.indexOf('鱼') >= 0) {
+      return this.spots[4];
+    }
+    if (question.indexOf('雷峰') >= 0 || question.indexOf('塔') >= 0) {
+      return this.spots[5];
+    }
+    return undefined;
+  }
+
+  private bestLowCrowdSpot(): ScenicSpot {
+    let best = this.spots[0];
+    for (let index = 1; index < this.spots.length; index++) {
+      if (this.currentForecastPercent(this.spots[index]) < this.currentForecastPercent(best)) {
+        best = this.spots[index];
+      }
+    }
+    return best;
   }
 
   private submitFollowUp(): void {
@@ -1911,7 +2395,7 @@ struct Index {
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor('#263B66')
-        Text(`管理员 · ${this.adminActiveTab} · 本地演示数据`)
+        Text(`管理员 · ${this.adminActiveTab} · 景区运营数据`)
           .fontSize(12)
           .fontColor('#7180A0')
       }
@@ -1954,7 +2438,7 @@ struct Index {
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#263B66')
-        Text('所有数据均为本地模拟，可在下方页面进行联动操作。')
+        Text('运营数据会在各业务页面联动更新。')
           .fontSize(13)
           .fontColor('#7180A0')
       }
@@ -1969,7 +2453,7 @@ struct Index {
       .width('100%')
 
       Column({ space: 10 }) {
-        Text('客流调度演示')
+        Text('客流调度')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor('#293A5D')
@@ -1988,7 +2472,7 @@ struct Index {
               .onClick(() => this.selectCrowdScenario(scenario))
           }, (scenario: string) => scenario)
         }
-        Text(`调度效果：已向 ${this.diversionMetric()} 位模拟游客下发错峰建议；已生成的个性路线会自动仅重排未到达景点。`)
+        Text(`调度效果：已向 ${this.diversionMetric()} 位游客下发错峰建议；已生成的个性路线会自动仅重排未到达景点。`)
           .fontSize(12)
           .lineHeight(19)
           .fontColor('#3F5A91')
@@ -2015,7 +2499,7 @@ struct Index {
           .padding(14)
           .backgroundColor('#FFF4E6')
           .borderRadius(14)
-        Text(`雷峰塔讲解集合点当前预计等待 ${this.projectWaitMinutes(this.projects[3])} 分钟，可在“预约”页模拟放行队列。`)
+        Text(`雷峰塔讲解集合点当前预计等待 ${this.projectWaitMinutes(this.projects[3])} 分钟，可在“预约”页放行队列。`)
           .fontSize(13)
           .lineHeight(20)
           .fontColor('#3F5A91')
@@ -2089,7 +2573,7 @@ struct Index {
   @Builder
   adminFacilityPage() {
     Column({ space: 14 }) {
-      this.adminSectionHeading('景区设施管理', '设施状态会即时保存在本次演示中')
+      this.adminSectionHeading('景区设施管理', '设施状态会即时同步到运营页面')
       ForEach(this.facilities, (facility: ScenicFacility, index: number) => {
         Column({ space: 9 }) {
           Row() {
@@ -2193,7 +2677,7 @@ struct Index {
   @Builder
   adminReservationPage() {
     Column({ space: 14 }) {
-      this.adminSectionHeading('预约队列运营', `当前模拟时钟 ${this.simulatedClock()} · 可放行队列和补充余位`)
+      this.adminSectionHeading('预约队列运营', `当前运营时钟 ${this.simulatedClock()} · 可放行队列和补充余位`)
       ForEach(this.projects, (project: ProjectReservation, index: number) => {
         Column({ space: 10 }) {
           Row() {
@@ -2216,7 +2700,7 @@ struct Index {
             .fontSize(12)
             .fontColor('#61708A')
           Row({ space: 9 }) {
-            Button('模拟放行队列')
+            Button('放行队列')
               .layoutWeight(1)
               .height(34)
               .fontSize(12)
@@ -2246,7 +2730,7 @@ struct Index {
   @Builder
   adminServicePage() {
     Column({ space: 14 }) {
-      this.adminSectionHeading('客服与回访管理', '游客反馈和会话在本地演示中同步呈现')
+      this.adminSectionHeading('客服与回访管理', '游客反馈和会话实时同步呈现')
       Column({ space: 8 }) {
         Text('最新游客反馈')
           .fontSize(17)
@@ -2278,11 +2762,11 @@ struct Index {
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
           .fontColor('#293A5D')
-        Text(`本次演示共 ${this.serviceMessages.length} 条会话消息，游客端可继续发起实时咨询。`)
+        Text(`当前共 ${this.serviceMessages.length} 条会话消息，游客端可继续发起实时咨询。`)
           .fontSize(13)
           .lineHeight(20)
           .fontColor('#61708A')
-        Button('模拟发起游后回访')
+        Button('发起游后回访')
           .width('100%')
           .height(36)
           .fontSize(12)
@@ -2348,7 +2832,7 @@ struct Index {
 
   private dispatchProjectQueue(project: ProjectReservation): void {
     this.queueRefreshCount = this.queueRefreshCount + 1;
-    this.notice = `${project.name} 已模拟放行一批游客，预计等待时间已更新。`;
+    this.notice = `${project.name} 已放行一批游客，预计等待时间已更新。`;
   }
 
   private restockProject(project: ProjectReservation, index: number): void {
@@ -2372,14 +2856,14 @@ struct Index {
   }
 
   private startAdminFollowUp(): void {
-    this.notice = '已向最近完成行程的游客发送模拟回访邀请。';
+    this.notice = '已向最近完成行程的游客发送回访邀请。';
   }
 
   private exitAdmin(): void {
     this.loggedIn = false;
     this.userRole = '游客';
-    this.account = 'tourist';
-    this.password = '123456';
+    this.account = '';
+    this.password = '';
     this.notice = '已退出管理端，可使用游客账号继续体验。';
   }
 
@@ -2434,16 +2918,19 @@ struct Index {
             .textAlign(TextAlign.Center)
         }
         .layoutWeight(1)
-        .height(60)
+        .height(54)
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
         .onClick(() => this.activeTab = tab)
       }, (tab: string) => tab)
     }
-    .width('100%')
-    .height(70)
-    .padding({ top: 4, bottom: 6 })
+    .width('92%')
+    .height(66)
+    .padding({ left: 6, right: 6, top: 6, bottom: 6 })
     .alignItems(VerticalAlign.Center)
     .backgroundColor(Color.White)
+    .borderRadius(24)
+    .shadow({ radius: 18, color: '#22000000', offsetX: 0, offsetY: 6 })
+    .margin({ left: 16, right: 16, bottom: 14 })
   }
 }

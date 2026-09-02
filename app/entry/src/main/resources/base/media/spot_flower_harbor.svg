@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220">
+  <rect width="360" height="220" fill="#e8f4e2"/>
+  <path d="M0 128 C69 107 118 124 179 108 C241 92 300 104 360 83 L360 220 L0 220 Z" fill="#7db9ad"/>
+  <path d="M0 170 C69 151 128 165 193 149 C252 135 312 145 360 129 L360 220 L0 220 Z" fill="#4d9c98"/>
+  <ellipse cx="82" cy="153" rx="43" ry="17" fill="#5d9d64"/>
+  <ellipse cx="242" cy="147" rx="50" ry="18" fill="#629f68"/>
+  <circle cx="77" cy="122" r="16" fill="#ed8892"/>
+  <circle cx="101" cy="132" r="13" fill="#f4a1a7"/>
+  <circle cx="230" cy="118" r="17" fill="#e77888"/>
+  <circle cx="265" cy="130" r="14" fill="#f0a2a6"/>
+  <path d="M136 162 C158 145 187 145 209 162 C185 174 160 174 136 162 Z" fill="#f3a94d"/>
+  <circle cx="171" cy="160" r="7" fill="#fff3cf"/>
+  <text x="24" y="38" font-size="24" font-family="sans-serif" font-weight="700" fill="#2b6041">花港观鱼</text>
+</svg>

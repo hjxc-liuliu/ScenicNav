@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220">
+  <rect width="360" height="220" fill="#d9edf1"/>
+  <path d="M0 134 C54 112 105 123 159 107 C224 88 285 105 360 82 L360 220 L0 220 Z" fill="#74b6c7"/>
+  <path d="M130 220 C151 174 166 137 178 92 C193 139 211 177 236 220 Z" fill="#78a968"/>
+  <path d="M161 220 C171 174 177 132 179 92 C187 140 199 179 215 220 Z" fill="#e5dec8"/>
+  <path d="M78 87 C102 65 130 65 154 87" stroke="#55875a" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M235 76 C266 52 299 58 326 88" stroke="#4d8157" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <circle cx="110" cy="77" r="18" fill="#6ea26a"/>
+  <circle cx="283" cy="72" r="20" fill="#649a66"/>
+  <text x="24" y="38" font-size="24" font-family="sans-serif" font-weight="700" fill="#275743">苏堤春晓</text>
+</svg>

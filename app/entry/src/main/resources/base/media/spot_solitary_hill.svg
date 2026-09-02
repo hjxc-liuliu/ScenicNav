@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220">
+  <rect width="360" height="220" fill="#e8f1df"/>
+  <path d="M0 150 C70 119 116 132 176 102 C237 72 291 92 360 60 L360 220 L0 220 Z" fill="#7fb982"/>
+  <path d="M0 169 C73 143 128 153 190 129 C253 105 297 120 360 99 L360 220 L0 220 Z" fill="#4f9366"/>
+  <path d="M92 112 L131 77 L171 112 Z" fill="#f3efe2"/>
+  <path d="M105 112 L105 148 L159 148 L159 112" fill="#d6c59f"/>
+  <path d="M122 96 L142 96" stroke="#795c3a" stroke-width="6" stroke-linecap="round"/>
+  <path d="M229 105 C244 75 270 65 300 80 C274 92 255 106 243 132" fill="#4d8058"/>
+  <path d="M28 178 C91 160 151 168 220 153 C274 141 320 145 360 132" stroke="#dfeedd" stroke-width="9" fill="none"/>
+  <text x="24" y="38" font-size="24" font-family="sans-serif" font-weight="700" fill="#2d563a">孤山</text>
+</svg>

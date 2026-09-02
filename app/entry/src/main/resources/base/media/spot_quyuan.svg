@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220">
+  <rect width="360" height="220" fill="#dff0ea"/>
+  <path d="M0 116 C67 100 122 118 184 101 C244 84 300 90 360 74 L360 220 L0 220 Z" fill="#70b3b2"/>
+  <path d="M0 150 C72 132 131 150 198 131 C260 114 313 125 360 110 L360 220 L0 220 Z" fill="#4a969b"/>
+  <circle cx="84" cy="112" r="20" fill="#e889a2"/>
+  <circle cx="136" cy="139" r="18" fill="#f0a7b6"/>
+  <circle cx="227" cy="113" r="21" fill="#df7898"/>
+  <path d="M72 151 C95 132 111 132 134 151 C111 160 94 160 72 151 Z" fill="#5c9d63"/>
+  <path d="M202 150 C229 130 247 132 274 151 C246 162 226 163 202 150 Z" fill="#57925e"/>
+  <path d="M26 74 C56 51 96 53 121 82" stroke="#6ba56f" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <text x="24" y="38" font-size="24" font-family="sans-serif" font-weight="700" fill="#27605a">曲院风荷</text>
+</svg>

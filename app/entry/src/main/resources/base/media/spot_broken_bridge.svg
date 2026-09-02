@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220">
+  <rect width="360" height="220" fill="#d7ebf4"/>
+  <path d="M0 136 C54 116 108 126 162 112 C226 96 282 114 360 92 L360 220 L0 220 Z" fill="#79b8c6"/>
+  <path d="M0 158 C66 144 112 166 180 146 C244 128 292 150 360 132 L360 220 L0 220 Z" fill="#4f9aa9"/>
+  <path d="M35 128 C88 83 145 83 198 128" fill="none" stroke="#f8faf6" stroke-width="15" stroke-linecap="round"/>
+  <path d="M47 128 L186 128" stroke="#d7d4c2" stroke-width="10" stroke-linecap="round"/>
+  <path d="M70 129 L70 154 M112 126 L112 155 M154 129 L154 154" stroke="#f8faf6" stroke-width="7" stroke-linecap="round"/>
+  <path d="M230 56 C260 42 287 45 314 62" stroke="#4b7f60" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <circle cx="272" cy="48" r="20" fill="#5f9b73"/>
+  <path d="M236 72 C263 55 295 60 326 80" stroke="#6aa880" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <text x="24" y="38" font-size="24" font-family="sans-serif" font-weight="700" fill="#245342">断桥残雪</text>
+</svg>

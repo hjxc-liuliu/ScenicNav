@@ -1,6 +1,6 @@
 # 山水智游（ScenicNav）
 
-这是一个面向 HarmonyOS 的智慧景区游客端 MVP：ArkTS/ArkUI 提供游客体验，仓颉提供 REST API。项目已实现演示账号登录、票务、电子凭证、导览、项目预约、餐宿、商城积分和反馈等完整前端模拟闭环。
+这是一个面向 HarmonyOS 的智慧景区游客端应用：ArkTS/ArkUI 提供游客体验，仓颉提供 REST API。项目覆盖账号登录、票务、电子凭证、导览、项目预约、餐宿、商城积分、智能咨询和反馈等核心业务流程。
 
 ## 目录
 
@@ -10,14 +10,40 @@
 - `infra/`：MySQL、Redis 与库存原子扣减脚本。
 - `loadtest/`：k6 压测脚本。
 
+## 素材来源
+
+- 登录页西湖实景图：Wikimedia Commons，`The Leifeng Pagoda, boats, and the West Lake.jpg`，作者 CatOnMars，许可 CC BY-SA 4.0。
+- 首页轮播图：
+  - `The Leifeng Pagoda, boats, and the West Lake.jpg`，Wikimedia Commons，作者 CatOnMars，许可 CC BY-SA 4.0。
+  - `Broken Bridge (Hangzhou) 20250505.jpg`，Wikimedia Commons，作者 Suicasmo，许可 CC0 1.0。
+  - `Su Causeway, West Lake.jpg`，Wikimedia Commons，作者钉钉，许可 CC BY-SA 4.0。
+
 ## 客户端运行
 
 1. 安装当前稳定版 DevEco Studio，并下载与工程匹配的 HarmonyOS SDK（工程目标为 API 12）。
 2. 使用 DevEco Studio 打开 `app` 目录，等待依赖同步。
 3. 选择 HarmonyOS 模拟器或真机，运行 `entry` 模块。
-4. 使用演示账号 `tourist` 与密码 `123456` 登录。
+4. 本地开发阶段可使用内置测试账号 `tourist` 与密码 `123456` 登录；接入正式认证服务后，请使用真实账号体系。
 
-客户端默认使用 `ScenicRepository` 的本地模拟数据，因而无需外部地图、支付、人脸、短信或服务端密钥即可演示。切换真实服务时，只需替换仓储层并遵循 `docs/openapi.yaml`。
+客户端的数据访问集中在 `ScenicRepository`，后续对接正式景区服务时，可在仓储层接入真实票务、客流、支付、地图、短信和推送接口，并遵循 `docs/openapi.yaml`。
+
+### 智能咨询配置
+
+游客端“小湖助手”会调用 DeepSeek Chat Completions API。请在以下文件中填入 API Key：
+
+```text
+app/entry/src/main/ets/config/AiConfig.ets
+```
+
+把第一行替换为你的真实 Key：
+
+```ts
+export const AI_API_KEY: string = '你的 API Key';
+```
+
+同一文件中也可以修改 `AI_BASE_URL` 和 `AI_MODEL`。当前默认地址为 `https://api.deepseek.com/chat/completions`，默认模型为 `deepseek-v4-flash`。如果 API Key 未填写或调用失败，应用会使用本地景区知识作为兜底回复，保证游客仍能获得基础帮助。
+
+注意：正式上线时建议改为由后端服务代为调用大模型，避免 Key 随安装包暴露。
 
 ## 服务端运行
 
@@ -26,7 +52,7 @@
 3. 访问 `http://127.0.0.1:8080/health` 验证服务；接口前缀为 `/api/v1`。
 4. 执行 `cjpm test` 运行库存、预约与金额计算测试。
 
-仓颉服务当前提供与客户端相同的演示 API 数据，同时将库存与预约的不变式落在可单测领域对象中。生产接入时，在仓储适配层调用 `infra/redis_reserve.lua` 完成 Redis 原子扣减，再于同一业务事务内持久化到 MySQL；`scenicnav-server/sql` 已提供完整表结构、唯一幂等键与种子数据。
+仓颉服务提供 REST API、库存与预约领域逻辑。正式部署时，在仓储适配层调用 `infra/redis_reserve.lua` 完成 Redis 原子扣减，再于同一业务事务内持久化到 MySQL；`scenicnav-server/sql` 已提供完整表结构、唯一幂等键与初始化数据。
 
 ## 基础设施与压测
 
@@ -47,6 +73,6 @@ k6 run loadtest/scenicnav.js
 ## 已知边界
 
 - 本机尚未安装 DevEco Studio、HarmonyOS SDK 与仓颉工具链，因此本次未在本机生成 HAP 或运行仓颉编译。
-- 真实地图、定位、支付、闸机/人脸、短信与推送均以可替换模拟接口表达，未使用任何第三方密钥或硬件。
-- 后端演示路由目前返回种子数据；接入 MySQL/Redis 的仓储适配器是下一步生产化工作，不应在没有真实凭据和部署环境时伪造验证结果。
+- 地图、定位、支付、闸机/人脸、短信与推送需要接入景区正式供应商接口和硬件环境。
+- 后端需要在目标部署环境中配置 MySQL、Redis、认证服务和第三方接口凭据后，再进行正式联调验收。
 

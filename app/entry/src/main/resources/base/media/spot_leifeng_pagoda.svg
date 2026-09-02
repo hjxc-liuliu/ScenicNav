@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220">
+  <rect width="360" height="220" fill="#f4ead8"/>
+  <circle cx="287" cy="57" r="31" fill="#f0b45a"/>
+  <path d="M0 158 C61 134 111 151 168 126 C227 101 295 112 360 88 L360 220 L0 220 Z" fill="#9db56d"/>
+  <path d="M159 70 L210 70 L199 96 L170 96 Z" fill="#8b4f38"/>
+  <path d="M149 96 L220 96 L204 121 L165 121 Z" fill="#9b5b3d"/>
+  <path d="M138 121 L231 121 L211 150 L158 150 Z" fill="#a96843"/>
+  <path d="M166 150 L205 150 L212 196 L158 196 Z" fill="#d9b77d"/>
+  <path d="M174 160 L196 160 L196 196 L174 196 Z" fill="#7d4937"/>
+  <path d="M143 69 L184 39 L216 69" fill="#6c3b31"/>
+  <path d="M111 196 C158 180 206 181 253 196" stroke="#e8dec8" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <text x="24" y="38" font-size="24" font-family="sans-serif" font-weight="700" fill="#6b4930">雷峰塔</text>
+</svg>

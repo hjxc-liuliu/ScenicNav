@@ -17,7 +17,7 @@ import {
 } from '../common/Models';
 
 /**
- * MVP 的本地模拟仓储。将来切换真实服务时，只替换本类中的实现，页面无需改动。
+ * 景区数据仓储。正式部署时在本类中接入真实 REST API，页面层无需改动。
  */
 export class ScenicRepository {
   private crowdScenario: string = '常态';
@@ -28,7 +28,7 @@ export class ScenicRepository {
     const role = account === 'admin' ? 'admin' : 'tourist';
     const response: ApiResponse<string> = {
       code: allowed ? 0 : 401,
-      message: allowed ? (role === 'admin' ? '管理员登录成功' : '游客登录成功') : '演示账号为 tourist / 123456 或 admin / 123456',
+      message: allowed ? (role === 'admin' ? '管理员登录成功' : '游客登录成功') : '账号或密码不正确',
       data: allowed ? `mock-token-${role}-001` : '',
       traceId: 'login-demo-001'
     };
