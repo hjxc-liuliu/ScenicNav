@@ -1,0 +1,119 @@
+openapi: 3.0.3
+info:
+  title: ScenicNav REST API
+  version: 1.0.0-mvp
+  description: 智慧景区旅游服务系统的端后契约。金额均以分（fen）传输。
+servers:
+  - url: http://127.0.0.1:8080/api/v1
+paths:
+  /auth/login:
+    post:
+      summary: 演示账号登录
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /tickets:
+    get:
+      summary: 查询票种与分时余量
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /orders/tickets:
+    post:
+      summary: 创建电子票订单
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /orders/tickets/{orderId}/cancel:
+    post:
+      summary: 退改电子票并释放库存
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /guide/spots:
+    get:
+      summary: 查询景点、讲解和实时人流
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /guide/routes:
+    get:
+      summary: 按游客偏好推荐路线
+      parameters:
+        - name: preference
+          in: query
+          schema: { type: string, example: 亲子 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /reservations/projects:
+    get:
+      summary: 查询项目预约时段和等待时间
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+    post:
+      summary: 创建项目预约
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /merchants:
+    get:
+      summary: 查询餐饮和住宿商家
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string, enum: [HOTEL, RESTAURANT] }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /mall/products:
+    get:
+      summary: 查询旅游商城商品
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /mall/orders:
+    post:
+      summary: 创建商城订单并记入积分
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /points/share:
+    post:
+      summary: 记录游玩分享并发放一次积分
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /feedback:
+    post:
+      summary: 提交意见、投诉或客服问题
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 80 }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Success:
+      description: 统一成功响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, message, data, traceId]
+      properties:
+        code: { type: integer, example: 0 }
+        message: { type: string, example: ok }
+        data: { type: object, additionalProperties: true }
+        traceId: { type: string, example: ticket-list-001 }
+

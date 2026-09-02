@@ -1,0 +1,13 @@
+[package]
+  cjc-version = "1.0.5"
+  name = "scenicnav_server"
+  description = "智慧景区旅游服务系统仓颉 REST 服务"
+  version = "1.0.0"
+  output-type = "executable"
+  src-dir = "src"
+  target-dir = "target"
+
+[dependencies]
+  # stdx 提供 HTTP 服务能力；首次构建时由 cjpm 下载。
+  stdx = { git = "https://gitcode.com/Cangjie/cangjie_stdx.git", branch = "main", output-type = "dynamic" }
+

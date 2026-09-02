@@ -1,0 +1,8 @@
+.idea/
+.hvigor/
+build/
+**/build/
+**/oh_modules/
+**/.cangjie/
+*.log
+

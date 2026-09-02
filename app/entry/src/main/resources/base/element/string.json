@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "app_name", "value": "山水智游" },
+    { "name": "module_desc", "value": "智慧景区旅游服务系统" },
+    { "name": "EntryAbility_desc", "value": "山水智游主入口" },
+    { "name": "EntryAbility_label", "value": "山水智游" }
+  ]
+}
+
