@@ -1,0 +1,8 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "智慧景区旅游服务系统鸿蒙端",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}
