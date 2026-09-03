@@ -1,0 +1,4 @@
+An exception has occurred:
+Exception: Could not find 'cmake' in your system's PATH. Please ensure CMake is installed and added to your environment variables!
+	 at default.checkBuildTools()(C:\Users\Hjxc\.cjpm\git\stdx\4150e3d70f758231a3295d8b4b6ece5e5476d387\build.cj:75)
+	 at default.main()(C:\Users\Hjxc\.cjpm\git\stdx\4150e3d70f758231a3295d8b4b6ece5e5476d387\build.cj:108)

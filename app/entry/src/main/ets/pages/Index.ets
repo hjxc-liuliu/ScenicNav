@@ -1,6 +1,7 @@
 import {
   http
 } from '@kit.NetworkKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import {
   AI_API_KEY,
   AI_BASE_URL,
@@ -8,6 +9,7 @@ import {
 } from '../config/AiConfig';
 import {
   AdminOrderRecord,
+  CartItem,
   ChatMessage,
   CrowdSnapshot,
   DEMO_ADMIN_ORDERS,
@@ -71,7 +73,7 @@ struct Index {
   @State private password: string = '';
   @State private loggedIn: boolean = false;
   @State private userRole: string = '游客';
-  @State private notice: string = '欢迎使用山水智游，请登录账号。';
+  @State @Watch('onNoticeChanged') private notice: string = '欢迎使用山水智游，请登录账号。';
   @State private ticketIndex: number = 0;
   @State private selectedRouteId: string = 'family';
   @State private selectedSpotId: string = 'sudi';
@@ -86,32 +88,45 @@ struct Index {
   @State private autoAvoidCongestion: boolean = true;
   @State private rerouteAdoptions: number = 0;
   @State private selectedMerchantCategory: string = '全部';
+  @State private merchantBookingIds: string[] = [];
   @State private adminActiveTab: string = '概览';
   @State private mapExpanded: boolean = false;
   @State private navigationActive: boolean = false;
   @State private navigationStep: number = 0;
   @State private ticketOrder: TicketOrder | undefined = undefined;
   @State private projectBookings: ProjectBooking[] = [];
-  @State private mallOrders: string[] = [];
+  @State private cartItems: CartItem[] = [];
+  @State private mallCartOpen: boolean = false;
+  @State private deliveryRecipient: string = '';
+  @State private deliveryPhone: string = '';
+  @State private deliveryAddress: string = '';
   @State private ticketInventoryDelta: number[] = [0, 0, 0];
   @State private ticketPausedIds: string[] = [];
   @State private projectInventoryDelta: number[] = [0, 0, 0, 0];
   @State private queueRefreshCount: number = 0;
+  @State private projectQueueReleaseCounts: number[] = [0, 0, 0, 0];
   @State private facilityStatuses: string[] = ['关注中', '正常', '正常', '繁忙', '正常', '正常'];
   @State private remindedProjectIds: string[] = [];
   @State private feedbackHandled: boolean = false;
   @State private latestFeedback: string = '游客反馈：希望断桥高峰时增加分流提示。';
   @State private feedbackContent: string = '';
+  @State private feedbackReplyDraft: string = '';
+  @State private feedbackReply: string = '';
   @State private points: number = 320;
   @State private sharedToday: boolean = false;
+  @State private journeyPhotoUri: string = '';
+  @State private journeyPhotoCaption: string = '';
   @State private aiAnswering: boolean = false;
   @State private serviceDraft: string = '';
   @State private serviceMessages: ChatMessage[] = DEMO_CHAT_MESSAGES;
   @State private followUpRating: number = 0;
   @State private followUpCompleted: boolean = false;
   @State private historyRecords: VisitorHistoryRecord[] = DEMO_HISTORY_RECORDS;
+  @State private historyPageType: string = '';
+  @State private selectedHistoryRecordId: string = '';
   private crowdTimerId: number = -1;
   private homePhotoTimerId: number = -1;
+  private noticeTimerId: number = -1;
 
   aboutToAppear(): void {
     this.refreshCrowdData();
@@ -132,6 +147,24 @@ struct Index {
       clearInterval(this.homePhotoTimerId);
       this.homePhotoTimerId = -1;
     }
+    if (this.noticeTimerId >= 0) {
+      clearTimeout(this.noticeTimerId);
+      this.noticeTimerId = -1;
+    }
+  }
+
+  private onNoticeChanged(): void {
+    if (this.noticeTimerId >= 0) {
+      clearTimeout(this.noticeTimerId);
+      this.noticeTimerId = -1;
+    }
+    if (this.notice.length === 0) {
+      return;
+    }
+    this.noticeTimerId = setTimeout(() => {
+      this.notice = '';
+      this.noticeTimerId = -1;
+    }, 3200);
   }
 
   build() {
@@ -1490,38 +1523,115 @@ struct Index {
       }
       ForEach(this.merchants, (merchant: MerchantItem) => {
         if (this.selectedMerchantCategory === '全部' || this.selectedMerchantCategory === merchant.category) {
-          Row() {
-            Column({ space: 5 }) {
-              Text(`${merchant.category} · ${merchant.name}`)
-                .fontSize(16)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#24362B')
-              Text(merchant.description)
-                .fontSize(12)
-                .fontColor('#6F7F75')
-              Text(`★ ${merchant.rating}`)
-                .fontSize(12)
-                .fontColor('#C77C20')
-            }
-            .alignItems(HorizontalAlign.Start)
-            .layoutWeight(1)
-            Button('预订')
-              .fontSize(12)
-              .height(34)
-              .backgroundColor('#E5F2E9')
-              .fontColor('#176B43')
-              .borderRadius(17)
-              .onClick(() => this.notice = `${merchant.name} 预订单已生成。`)
-          }
-          .width('100%')
-          .padding(15)
-          .backgroundColor(Color.White)
-          .borderRadius(15)
-          .margin({ top: 8 })
+          this.merchantCard(merchant)
         }
       }, (merchant: MerchantItem) => merchant.id)
     }
     .width('100%')
+  }
+
+  @Builder
+  merchantCard(merchant: MerchantItem) {
+    Column({ space: 9 }) {
+      Row({ space: 10 }) {
+        Column({ space: 4 }) {
+          Text(`${merchant.category} · ${merchant.name}`)
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#24362B')
+          Text(merchant.description)
+            .fontSize(12)
+            .fontColor('#6F7F75')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text(merchant.priceText)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#C85C28')
+      }
+      .width('100%')
+
+      Column({ space: 3 }) {
+        Text(merchant.offerTitle)
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#365446')
+        Text(merchant.offerDetails)
+          .fontSize(12)
+          .lineHeight(18)
+          .fontColor('#6F7F75')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(10)
+      .backgroundColor('#F3F8F4')
+      .borderRadius(11)
+
+      Row({ space: 6 }) {
+        ForEach(merchant.facilities, (facility: string) => {
+          Text(facility)
+            .fontSize(11)
+            .fontColor('#41735A')
+            .backgroundColor('#E5F2E9')
+            .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+            .borderRadius(11)
+        }, (facility: string) => facility)
+      }
+      .width('100%')
+
+      Column({ space: 3 }) {
+        Text(`★ ${merchant.rating} · ${merchant.reviewCount} 条真实评价 · ${merchant.reviewTime}`)
+          .fontSize(12)
+          .fontColor('#C77C20')
+        Text(merchant.latestReview)
+          .fontSize(12)
+          .lineHeight(18)
+          .fontColor('#5A6E61')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
+      Row({ space: 10 }) {
+        Button(this.hasMerchantBooking(merchant.id) ? '已预订' : (merchant.category === '住宿' ? '预订客房' : '预订餐位'))
+          .layoutWeight(1)
+          .height(36)
+          .fontSize(12)
+          .backgroundColor(this.hasMerchantBooking(merchant.id) ? '#E2F2E8' : '#176B43')
+          .fontColor(this.hasMerchantBooking(merchant.id) ? '#176B43' : Color.White)
+          .borderRadius(18)
+          .onClick(() => this.bookMerchant(merchant))
+        Button('查看评价')
+          .layoutWeight(1)
+          .height(36)
+          .fontSize(12)
+          .backgroundColor('#FFF4E6')
+          .fontColor('#B66A28')
+          .borderRadius(18)
+          .onClick(() => this.notice = `${merchant.name} 当前评分 ${merchant.rating}，已有 ${merchant.reviewCount} 条游客评价。`)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor(Color.White)
+    .borderRadius(16)
+    .margin({ top: 8 })
+  }
+
+  private hasMerchantBooking(merchantId: string): boolean {
+    return this.merchantBookingIds.indexOf(merchantId) >= 0;
+  }
+
+  private bookMerchant(merchant: MerchantItem): void {
+    if (this.hasMerchantBooking(merchant.id)) {
+      this.notice = `${merchant.name} 已预订，可按预订信息到店使用。`;
+      return;
+    }
+    this.merchantBookingIds = [...this.merchantBookingIds, merchant.id];
+    const bookingType = merchant.category === '住宿' ? '客房' : '餐位';
+    this.notice = `${merchant.name} ${bookingType}预订成功，到店报手机号即可核验。`;
+    this.addHistory(merchant.category, merchant.name, `${bookingType}预订成功 · ${merchant.offerTitle}`);
   }
 
   private bookProject(project: ProjectReservation): void {
@@ -1617,11 +1727,19 @@ struct Index {
   }
 
   private projectWaitMinutes(project: ProjectReservation): number {
-    return Math.max(5, project.waitMinutes - (this.queueRefreshCount % 4) * 3);
+    const refreshedMinutes = (this.queueRefreshCount % 4) * 3;
+    const releasedMinutes = this.projectQueueReleaseCount(project) * 3;
+    return Math.max(5, project.waitMinutes - refreshedMinutes - releasedMinutes);
   }
 
   private projectQueueSize(project: ProjectReservation): number {
-    return Math.max(3, project.queueSize - (this.queueRefreshCount % 4) * 7);
+    const refreshedVisitors = (this.queueRefreshCount % 4) * 7;
+    const releasedVisitors = this.projectQueueReleaseCount(project) * 7;
+    return Math.max(3, project.queueSize - refreshedVisitors - releasedVisitors);
+  }
+
+  private projectQueueReleaseCount(project: ProjectReservation): number {
+    return this.projectQueueReleaseCounts[this.projectIndex(project.id)];
   }
 
   private simulatedClock(): string {
@@ -1673,18 +1791,32 @@ struct Index {
 
   @Builder
   mallPage() {
-    Column({ space: 18 }) {
-      Column({ space: 7 }) {
-        Text('景区好物，寄一份山水回家')
-          .fontSize(21)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#214231')
-        Text(`当前积分 ${this.points} · 分享游玩照片可额外获得 20 积分`)
-          .fontSize(13)
-          .fontColor('#6F7F75')
+    if (this.mallCartOpen) {
+      this.shoppingCartPage()
+    } else {
+      Column({ space: 18 }) {
+      Row({ space: 12 }) {
+        Column({ space: 7 }) {
+          Text('景区好物，寄一份山水回家')
+            .fontSize(21)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#214231')
+          Text(`当前积分 ${this.points} · 分享游玩照片可额外获得 20 积分`)
+            .fontSize(13)
+            .fontColor('#6F7F75')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Button(`购物车 ${this.cartItemCount()} 件`)
+          .height(36)
+          .fontSize(12)
+          .backgroundColor('#E5F2E9')
+          .fontColor('#176B43')
+          .borderRadius(18)
+          .onClick(() => this.mallCartOpen = true)
       }
-      .alignItems(HorizontalAlign.Start)
       .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       ForEach(this.products, (product: MallProduct) => {
         Row() {
@@ -1702,11 +1834,11 @@ struct Index {
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
-          Button(this.mallOrders.indexOf(product.id) >= 0 ? '已下单' : '加入订单')
+          Button(this.cartQuantity(product.id) > 0 ? `已选 ${this.cartQuantity(product.id)}` : '加入购物车')
             .fontSize(12)
             .height(35)
-            .backgroundColor(this.mallOrders.indexOf(product.id) >= 0 ? '#E2F2E8' : '#176B43')
-            .fontColor(this.mallOrders.indexOf(product.id) >= 0 ? '#176B43' : Color.White)
+            .backgroundColor(this.cartQuantity(product.id) > 0 ? '#E2F2E8' : '#176B43')
+            .fontColor(this.cartQuantity(product.id) > 0 ? '#176B43' : Color.White)
             .borderRadius(17)
             .onClick(() => this.buyProduct(product))
         }
@@ -1715,14 +1847,6 @@ struct Index {
         .backgroundColor(Color.White)
         .borderRadius(16)
       }, (product: MallProduct) => product.id)
-
-      Button(this.sharedToday ? '今日分享已获得 20 积分' : '分享游玩照片，获得 20 积分')
-        .width('100%')
-        .height(44)
-        .backgroundColor(this.sharedToday ? '#E2F2E8' : '#FFF0E7')
-        .fontColor(this.sharedToday ? '#176B43' : '#C85C28')
-        .borderRadius(22)
-        .onClick(() => this.shareJourney())
 
       Column({ space: 7 }) {
         Text('限时住玩组合')
@@ -1745,17 +1869,279 @@ struct Index {
       .borderRadius(16)
     }
     .width('100%')
+    }
+  }
+
+  @Builder
+  shoppingCartPage() {
+    Column({ space: 16 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text('购物车')
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#214231')
+          Text(`已选 ${this.cartItemCount()} 件景区好物`)
+            .fontSize(13)
+            .fontColor('#6F7F75')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Button('继续选购')
+          .height(34)
+          .fontSize(12)
+          .backgroundColor('#E5F2E9')
+          .fontColor('#176B43')
+          .borderRadius(17)
+          .onClick(() => this.mallCartOpen = false)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.cartItems.length === 0) {
+        Text('购物车还是空的，去挑一件喜欢的景区文创吧。')
+          .fontSize(14)
+          .fontColor('#738078')
+          .width('100%')
+          .padding(18)
+          .backgroundColor(Color.White)
+          .borderRadius(16)
+      } else {
+        ForEach(this.cartItems, (item: CartItem) => {
+          Row({ space: 10 }) {
+            Column({ space: 5 }) {
+              Text(this.productForCartItem(item).name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#24362B')
+              Text(this.productForCartItem(item).description)
+                .fontSize(12)
+                .fontColor('#6F7F75')
+              Text(`${this.viewModel.formatPrice(this.productForCartItem(item).price)} × ${item.quantity}`)
+                .fontSize(14)
+                .fontColor('#C85C28')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Column({ space: 6 }) {
+              Row({ space: 7 }) {
+                Text('-')
+                  .width(28)
+                  .height(28)
+                  .lineHeight(28)
+                  .textAlign(TextAlign.Center)
+                  .fontSize(18)
+                  .fontWeight(FontWeight.Bold)
+                  .backgroundColor('#E5F2E9')
+                  .fontColor('#176B43')
+                  .borderRadius(14)
+                  .onClick(() => this.adjustCartQuantity(item.productId, -1))
+                Text(`${item.quantity}`)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#24362B')
+                  .width(20)
+                  .textAlign(TextAlign.Center)
+                Text('+')
+                  .width(28)
+                  .height(28)
+                  .lineHeight(28)
+                  .textAlign(TextAlign.Center)
+                  .fontSize(18)
+                  .fontWeight(FontWeight.Bold)
+                  .backgroundColor('#176B43')
+                  .fontColor(Color.White)
+                  .borderRadius(14)
+                  .onClick(() => this.adjustCartQuantity(item.productId, 1))
+              }
+              Button('移除')
+                .height(26)
+                .fontSize(11)
+                .backgroundColor('#FFF0E7')
+                .fontColor('#C85C28')
+                .borderRadius(13)
+                .onClick(() => this.removeCartItem(item.productId))
+            }
+            .alignItems(HorizontalAlign.End)
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(Color.White)
+          .borderRadius(16)
+        }, (item: CartItem) => item.productId)
+
+        Column({ space: 9 }) {
+          Text('收货信息')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#24362B')
+          TextInput({ text: this.deliveryRecipient, placeholder: '收货人姓名' })
+            .onChange((value: string) => this.deliveryRecipient = value)
+            .height(42)
+            .backgroundColor(Color.White)
+            .borderRadius(10)
+          TextInput({ text: this.deliveryPhone, placeholder: '联系电话' })
+            .onChange((value: string) => this.deliveryPhone = value)
+            .height(42)
+            .backgroundColor(Color.White)
+            .borderRadius(10)
+          TextInput({ text: this.deliveryAddress, placeholder: '详细收货地址' })
+            .onChange((value: string) => this.deliveryAddress = value)
+            .height(42)
+            .backgroundColor(Color.White)
+            .borderRadius(10)
+        }
+        .width('100%')
+        .padding(14)
+        .backgroundColor('#F7F9F7')
+        .borderRadius(15)
+
+        Column({ space: 9 }) {
+          Row() {
+            Text('合计')
+              .fontSize(15)
+              .fontColor('#52665A')
+              .layoutWeight(1)
+            Text(this.viewModel.formatPrice(this.cartTotalPrice()))
+              .fontSize(21)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#C85C28')
+          }
+          .width('100%')
+          Text(`共 ${this.cartItemCount()} 件 · 结算后获得 ${this.cartEarnedPoints()} 积分`)
+            .fontSize(12)
+            .fontColor('#657A6B')
+          Button('提交订单并结算')
+            .width('100%')
+            .height(42)
+            .fontSize(14)
+            .backgroundColor('#176B43')
+            .fontColor(Color.White)
+            .borderRadius(21)
+            .onClick(() => this.checkoutCart())
+        }
+        .width('100%')
+        .padding(16)
+        .backgroundColor('#F1F8F3')
+        .borderRadius(16)
+      }
+      }
+      .width('100%')
   }
 
   private buyProduct(product: MallProduct): void {
-    if (this.mallOrders.indexOf(product.id) >= 0) {
-      this.notice = `${product.name} 已在订单中，支持邮寄到家。`;
+    this.adjustCartQuantity(product.id, 1);
+    this.notice = `${product.name} 已加入购物车，请在购物车中统一结算。`;
+  }
+
+  private cartQuantity(productId: string): number {
+    for (let index = 0; index < this.cartItems.length; index++) {
+      if (this.cartItems[index].productId === productId) {
+        return this.cartItems[index].quantity;
+      }
+    }
+    return 0;
+  }
+
+  private adjustCartQuantity(productId: string, amount: number): void {
+    const nextCartItems: CartItem[] = [];
+    let updated = false;
+    for (let index = 0; index < this.cartItems.length; index++) {
+      const item = this.cartItems[index];
+      if (item.productId === productId) {
+        const nextQuantity = item.quantity + amount;
+        if (nextQuantity > 0) {
+          nextCartItems.push({ productId: item.productId, quantity: nextQuantity });
+        }
+        updated = true;
+      } else {
+        nextCartItems.push({ productId: item.productId, quantity: item.quantity });
+      }
+    }
+    if (!updated && amount > 0) {
+      nextCartItems.push({ productId: productId, quantity: amount });
+    }
+    this.cartItems = nextCartItems;
+  }
+
+  private removeCartItem(productId: string): void {
+    this.adjustCartQuantity(productId, -this.cartQuantity(productId));
+    this.notice = '商品已从购物车移除。';
+  }
+
+  private productForCartItem(item: CartItem): MallProduct {
+    for (let index = 0; index < this.products.length; index++) {
+      if (this.products[index].id === item.productId) {
+        return this.products[index];
+      }
+    }
+    return this.products[0];
+  }
+
+  private cartItemCount(): number {
+    let count = 0;
+    for (let index = 0; index < this.cartItems.length; index++) {
+      count = count + this.cartItems[index].quantity;
+    }
+    return count;
+  }
+
+  private cartTotalPrice(): number {
+    let total = 0;
+    for (let index = 0; index < this.cartItems.length; index++) {
+      const item = this.cartItems[index];
+      total = total + this.productForCartItem(item).price * item.quantity;
+    }
+    return total;
+  }
+
+  private cartEarnedPoints(): number {
+    let points = 0;
+    for (let index = 0; index < this.cartItems.length; index++) {
+      const item = this.cartItems[index];
+      points = points + this.productForCartItem(item).points * item.quantity;
+    }
+    return points;
+  }
+
+  private checkoutCart(): void {
+    if (this.cartItems.length === 0) {
+      this.notice = '购物车为空，暂不能结算。';
       return;
     }
-    this.mallOrders = [...this.mallOrders, product.id];
-    this.points += product.points;
-    this.notice = `${product.name} 下单成功，获得 ${product.points} 积分。`;
-    this.addHistory('商城', product.name, '已生成邮寄订单');
+    if (this.deliveryRecipient.trim().length === 0 || this.deliveryPhone.trim().length < 7 || this.deliveryAddress.trim().length === 0) {
+      this.notice = '请完整填写收货人、联系电话和详细地址后再提交订单。';
+      return;
+    }
+    const itemNames: string[] = [];
+    for (let index = 0; index < this.cartItems.length; index++) {
+      const item = this.cartItems[index];
+      itemNames.push(`${this.productForCartItem(item).name} ×${item.quantity}`);
+    }
+    const earnedPoints = this.cartEarnedPoints();
+    const totalPrice = this.cartTotalPrice();
+    this.points = this.points + earnedPoints;
+    this.addHistory('购物', `景区文创订单 · ${this.cartItemCount()} 件`, `${itemNames.join('、')} · 共 ${this.viewModel.formatPrice(totalPrice)} · 寄往 ${this.deliveryAddress}`);
+    this.cartItems = [];
+    this.mallCartOpen = false;
+    this.notice = `订单已提交，共 ${this.viewModel.formatPrice(totalPrice)}，将寄送至 ${this.deliveryRecipient}。获得 ${earnedPoints} 积分。`;
+  }
+
+  private selectJourneyPhoto(): void {
+    const options = new photoAccessHelper.PhotoSelectOptions();
+    options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+    options.maxSelectNumber = 1;
+    const picker = new photoAccessHelper.PhotoViewPicker();
+    picker.select(options).then((result) => {
+      if (result.photoUris.length === 0) {
+        this.notice = '未选择照片，可再次打开相册选择。';
+        return;
+      }
+      this.journeyPhotoUri = result.photoUris[0];
+      this.notice = '游玩照片已选择，填写感想后即可发布分享。';
+    }).catch(() => {
+      this.notice = '暂时无法打开系统相册，请稍后再试。';
+    });
   }
 
   private shareJourney(): void {
@@ -1763,14 +2149,29 @@ struct Index {
       this.notice = '今天已经分享过了，明天再来记录新的风景吧。';
       return;
     }
+    if (this.journeyPhotoUri.length === 0) {
+      this.notice = '请先从系统相册选择一张游玩照片。';
+      return;
+    }
     this.sharedToday = true;
     this.points += 20;
     this.notice = '分享成功，已获得 20 积分。';
-    this.addHistory('互动', '游玩照片分享', '获得 20 积分');
+    this.addHistory('互动', '游玩照片分享', this.journeyPhotoCaption.trim().length > 0 ? `${this.journeyPhotoCaption} · 获得 20 积分` : '已分享游玩照片 · 获得 20 积分');
   }
 
   @Builder
   profilePage() {
+    if (this.selectedHistoryRecordId.length > 0) {
+      this.historyRecordDetailPage()
+    } else if (this.historyPageType.length > 0) {
+      this.historyRecordListPage()
+    } else {
+      this.profileOverviewPage()
+    }
+  }
+
+  @Builder
+  profileOverviewPage() {
     Column({ space: 18 }) {
       Row({ space: 12 }) {
         Text('旅')
@@ -1779,7 +2180,7 @@ struct Index {
           .textAlign(TextAlign.Center)
           .width(50)
           .height(50)
-          .padding({ top: 13 })
+          .lineHeight(50)
           .backgroundColor('#176B43')
           .borderRadius(25)
         Column({ space: 4 }) {
@@ -1794,6 +2195,7 @@ struct Index {
         .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       Column({ space: 10 }) {
         Row() {
@@ -1815,10 +2217,11 @@ struct Index {
             .textAlign(TextAlign.Center)
             .width(38)
             .height(38)
-            .padding({ top: 10 })
+            .lineHeight(38)
             .backgroundColor('#176B43')
             .borderRadius(19)
         }
+        .alignItems(VerticalAlign.Center)
         Button('打开小湖助手')
           .width('100%')
           .height(40)
@@ -1826,6 +2229,69 @@ struct Index {
           .fontColor('#176B43')
           .borderRadius(20)
           .onClick(() => this.activeTab = '客服')
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor(Color.White)
+      .borderRadius(16)
+
+      Column({ space: 10 }) {
+        Row() {
+          Column({ space: 4 }) {
+            Text('分享我的游玩照片')
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#24362B')
+            Text(this.journeyPhotoUri.length > 0 ? '照片已选择，可添加感想后分享给其他游客。' : '从系统相册选择一张西湖游玩照片，分享可获得 20 积分。')
+              .fontSize(12)
+              .lineHeight(18)
+              .fontColor('#718077')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Text('▧')
+            .fontSize(22)
+            .fontColor('#176B43')
+            .width(34)
+            .height(34)
+            .lineHeight(34)
+            .textAlign(TextAlign.Center)
+            .backgroundColor('#E5F2E9')
+            .borderRadius(17)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        if (this.journeyPhotoUri.length > 0) {
+          Image(this.journeyPhotoUri)
+            .width('100%')
+            .height(150)
+            .objectFit(ImageFit.Cover)
+            .borderRadius(13)
+          TextInput({ text: this.journeyPhotoCaption, placeholder: '写下此刻的游玩感想（可选）' })
+            .onChange((value: string) => this.journeyPhotoCaption = value)
+            .height(42)
+            .backgroundColor('#F3F6F4')
+            .borderRadius(10)
+        }
+        Row({ space: 10 }) {
+          Button(this.journeyPhotoUri.length > 0 ? '重新选择照片' : '选择游玩照片')
+            .layoutWeight(1)
+            .height(38)
+            .fontSize(12)
+            .backgroundColor('#E5F2E9')
+            .fontColor('#176B43')
+            .borderRadius(19)
+            .onClick(() => this.selectJourneyPhoto())
+          Button(this.sharedToday ? '今日已分享' : '发布分享 +20 积分')
+            .layoutWeight(1)
+            .height(38)
+            .fontSize(12)
+            .backgroundColor(this.sharedToday ? '#E2F2E8' : '#176B43')
+            .fontColor(this.sharedToday ? '#176B43' : Color.White)
+            .borderRadius(19)
+            .onClick(() => this.shareJourney())
+        }
+        .width('100%')
       }
       .width('100%')
       .padding(16)
@@ -1924,33 +2390,7 @@ struct Index {
         }, (booking: ProjectBooking) => booking.projectId)
       }
 
-      this.sectionHeading('游客历史记录', `${this.historyRecords.length} 条记录`)
-      ForEach(this.historyRecords, (record: VisitorHistoryRecord) => {
-        Row({ space: 10 }) {
-          Text(record.type)
-            .fontSize(11)
-            .fontColor('#176B43')
-            .backgroundColor('#E5F2E9')
-            .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-            .borderRadius(10)
-          Column({ space: 3 }) {
-            Text(record.title)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#2A3A31')
-            Text(`${record.detail} · ${record.time}`)
-              .fontSize(11)
-              .fontColor('#79867E')
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .padding(13)
-        .backgroundColor(Color.White)
-        .borderRadius(13)
-        .margin({ top: 7 })
-      }, (record: VisitorHistoryRecord) => record.id)
+      this.profileHistorySummary()
 
       this.sectionHeading('意见反馈', '自动分类 · 定期回访')
       Column({ space: 10 }) {
@@ -1970,27 +2410,22 @@ struct Index {
           .fontColor(Color.White)
           .borderRadius(19)
           .onClick(() => this.submitFeedback())
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor(Color.White)
-      .borderRadius(16)
-
-      Column({ space: 8 }) {
-        Text('景区管理端')
-          .fontSize(17)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#24362B')
-        Text('管理票务库存、景区设施、预约队列、订单与游客反馈。')
-          .fontSize(13)
-          .fontColor('#657A6B')
-        Button('切换到管理员登录')
+        if (this.feedbackReply.length > 0) {
+          Column({ space: 5 }) {
+            Text('景区客服回复')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#286C49')
+            Text(this.feedbackReply)
+              .fontSize(13)
+              .lineHeight(19)
+              .fontColor('#4E6558')
+          }
           .width('100%')
-          .height(38)
-          .backgroundColor('#E8EDF8')
-          .fontColor('#3F5A91')
-          .borderRadius(19)
-          .onClick(() => this.openAdminLogin())
+          .padding(12)
+          .backgroundColor('#E9F7EE')
+          .borderRadius(12)
+        }
       }
       .width('100%')
       .padding(16)
@@ -2009,6 +2444,203 @@ struct Index {
         })
     }
     .width('100%')
+  }
+
+  @Builder
+  profileHistorySummary() {
+    Column({ space: 10 }) {
+      this.sectionHeading('我的记录', `${this.historyRecords.length} 条记录`)
+      Row({ space: 10 }) {
+        this.historyCategoryCard('购物记录', '#C85C28')
+        this.historyCategoryCard('游玩记录', '#176B43')
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  historyCategoryCard(category: string, color: string) {
+    Column({ space: 6 }) {
+      Text(category)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#24362B')
+      Text(`${this.historyRecordsByCategory(category).length} 条`)
+        .fontSize(21)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+      Text(this.latestHistoryTitle(category))
+        .fontSize(11)
+        .fontColor('#718077')
+        .maxLines(1)
+      Text('查看专属记录 ›')
+        .fontSize(12)
+        .fontColor(color)
+    }
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
+    .padding(14)
+    .backgroundColor(Color.White)
+    .borderRadius(15)
+    .onClick(() => this.historyPageType = category)
+  }
+
+  @Builder
+  historyRecordListPage() {
+    Column({ space: 15 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text(this.historyPageType)
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#24362B')
+          Text('点击任一记录查看详情')
+            .fontSize(13)
+            .fontColor('#718077')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Button('返回个人中心')
+          .height(34)
+          .fontSize(12)
+          .backgroundColor('#E5F2E9')
+          .fontColor('#176B43')
+          .borderRadius(17)
+          .onClick(() => this.historyPageType = '')
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.historyRecordsByCategory(this.historyPageType).length === 0) {
+        Text('暂无记录，完成游览或商城结算后会同步显示在这里。')
+          .fontSize(14)
+          .fontColor('#738078')
+          .width('100%')
+          .padding(18)
+          .backgroundColor(Color.White)
+          .borderRadius(16)
+      } else {
+        ForEach(this.historyRecordsByCategory(this.historyPageType), (record: VisitorHistoryRecord) => {
+          Row({ space: 10 }) {
+            Text(record.type)
+              .fontSize(11)
+              .fontColor(this.historyPageType === '购物记录' ? '#C85C28' : '#176B43')
+              .backgroundColor(this.historyPageType === '购物记录' ? '#FFF0E7' : '#E5F2E9')
+              .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+              .borderRadius(10)
+            Column({ space: 3 }) {
+              Text(record.title)
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#2A3A31')
+              Text(`${record.detail} · ${record.time}`)
+                .fontSize(11)
+                .fontColor('#79867E')
+                .maxLines(1)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text('›')
+              .fontSize(22)
+              .fontColor('#829087')
+          }
+          .width('100%')
+          .padding(14)
+          .backgroundColor(Color.White)
+          .borderRadius(14)
+          .onClick(() => this.openHistoryRecord(record))
+        }, (record: VisitorHistoryRecord) => record.id)
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  historyRecordDetailPage() {
+    Column({ space: 15 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text('记录详情')
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#24362B')
+          Text(this.historyPageType)
+            .fontSize(13)
+            .fontColor('#718077')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Button('返回列表')
+          .height(34)
+          .fontSize(12)
+          .backgroundColor('#E5F2E9')
+          .fontColor('#176B43')
+          .borderRadius(17)
+          .onClick(() => this.selectedHistoryRecordId = '')
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Column({ space: 12 }) {
+        Text(this.selectedHistoryRecord().type)
+          .fontSize(12)
+          .fontColor(this.historyPageType === '购物记录' ? '#C85C28' : '#176B43')
+          .backgroundColor(this.historyPageType === '购物记录' ? '#FFF0E7' : '#E5F2E9')
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .borderRadius(12)
+        Text(this.selectedHistoryRecord().title)
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#24362B')
+        Text(this.selectedHistoryRecord().detail)
+          .fontSize(14)
+          .lineHeight(22)
+          .fontColor('#52665A')
+        Text(`记录时间：${this.selectedHistoryRecord().time}`)
+          .fontSize(12)
+          .fontColor('#79867E')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(18)
+      .backgroundColor(Color.White)
+      .borderRadius(17)
+    }
+    .width('100%')
+  }
+
+  private historyRecordsByCategory(category: string): VisitorHistoryRecord[] {
+    const records: VisitorHistoryRecord[] = [];
+    for (let index = 0; index < this.historyRecords.length; index++) {
+      const record = this.historyRecords[index];
+      const isShopping = record.type === '购物' || record.type === '商城';
+      if ((category === '购物记录' && isShopping) || (category === '游玩记录' && !isShopping)) {
+        records.push(record);
+      }
+    }
+    return records;
+  }
+
+  private latestHistoryTitle(category: string): string {
+    const records = this.historyRecordsByCategory(category);
+    if (records.length === 0) {
+      return '暂无记录';
+    }
+    return records[0].title;
+  }
+
+  private openHistoryRecord(record: VisitorHistoryRecord): void {
+    this.selectedHistoryRecordId = record.id;
+  }
+
+  private selectedHistoryRecord(): VisitorHistoryRecord {
+    for (let index = 0; index < this.historyRecords.length; index++) {
+      if (this.historyRecords[index].id === this.selectedHistoryRecordId) {
+        return this.historyRecords[index];
+      }
+    }
+    return this.historyRecords[0];
   }
 
   @Builder
@@ -2149,6 +2781,8 @@ struct Index {
     this.notice = '反馈已自动分类并转交客服，预计 1 个工作日内回复。';
     this.latestFeedback = `游客反馈：${this.feedbackContent}`;
     this.feedbackHandled = false;
+    this.feedbackReply = '';
+    this.feedbackReplyDraft = '';
     this.addHistory('反馈', '游客意见反馈', this.feedbackContent);
     this.feedbackContent = '';
   }
@@ -2740,17 +3374,32 @@ struct Index {
           .fontSize(13)
           .lineHeight(20)
           .fontColor('#61708A')
-        Text(this.feedbackHandled ? '处理状态：已处理并归档' : '处理状态：待客服处理')
+        Text(this.feedbackHandled ? '处理状态：已回复并归档' : '处理状态：待客服处理')
           .fontSize(12)
           .fontColor(this.feedbackHandled ? '#28764C' : '#B65B2A')
-        Button(this.feedbackHandled ? '反馈已处理' : '标记为已处理')
+        TextInput({ text: this.feedbackReplyDraft, placeholder: '输入给游客的回复，例如“已增加断桥分流引导”' })
+          .onChange((value: string) => this.feedbackReplyDraft = value)
+          .height(48)
+          .backgroundColor('#F2F5FB')
+          .borderRadius(10)
+        if (this.feedbackReply.length > 0) {
+          Text(`已发送回复：${this.feedbackReply}`)
+            .fontSize(12)
+            .lineHeight(19)
+            .fontColor('#3F5A91')
+            .width('100%')
+            .padding(10)
+            .backgroundColor('#EAF0FC')
+            .borderRadius(10)
+        }
+        Button(this.feedbackHandled ? '更新并发送回复' : '发送回复并归档')
           .width('100%')
           .height(36)
           .fontSize(12)
-          .backgroundColor(this.feedbackHandled ? '#E9F7EE' : '#FFF0E7')
-          .fontColor(this.feedbackHandled ? '#28764C' : '#B65B2A')
+          .backgroundColor('#3F5A91')
+          .fontColor(Color.White)
           .borderRadius(18)
-          .onClick(() => this.handleLatestFeedback())
+          .onClick(() => this.sendFeedbackReply())
       }
       .width('100%')
       .padding(16)
@@ -2831,8 +3480,13 @@ struct Index {
   }
 
   private dispatchProjectQueue(project: ProjectReservation): void {
-    this.queueRefreshCount = this.queueRefreshCount + 1;
-    this.notice = `${project.name} 已放行一批游客，预计等待时间已更新。`;
+    const projectIndex = this.projectIndex(project.id);
+    const nextReleaseCounts: number[] = [];
+    for (let index = 0; index < this.projectQueueReleaseCounts.length; index++) {
+      nextReleaseCounts.push(index === projectIndex ? this.projectQueueReleaseCounts[index] + 1 : this.projectQueueReleaseCounts[index]);
+    }
+    this.projectQueueReleaseCounts = nextReleaseCounts;
+    this.notice = `${project.name} 已放行一批游客，仅该项目的队列和预计等待时间已更新。`;
   }
 
   private restockProject(project: ProjectReservation, index: number): void {
@@ -2846,13 +3500,16 @@ struct Index {
     this.notice = `${project.name} 已补充 ${amount} 个可预约余位。`;
   }
 
-  private handleLatestFeedback(): void {
-    if (this.feedbackHandled) {
-      this.notice = '最新游客反馈已处理并归档。';
+  private sendFeedbackReply(): void {
+    const reply = this.feedbackReplyDraft.trim();
+    if (reply.length === 0) {
+      this.notice = '请先填写给游客的回复内容。';
       return;
     }
+    this.feedbackReply = reply;
+    this.feedbackReplyDraft = '';
     this.feedbackHandled = true;
-    this.notice = '反馈已标记为已处理，并已加入服务优化任务。';
+    this.notice = '回复已同步到游客个人中心，反馈已归档。';
   }
 
   private startAdminFollowUp(): void {
@@ -2907,17 +3564,20 @@ struct Index {
           Text(TAB_ICONS[index])
             .fontSize(21)
             .fontColor(this.activeTab === tab ? '#176B43' : '#829087')
-            .width(26)
+            .width('100%')
             .height(24)
+            .lineHeight(24)
             .textAlign(TextAlign.Center)
           Text(tab)
             .fontSize(11)
             .fontColor(this.activeTab === tab ? '#176B43' : '#829087')
             .width('100%')
             .height(16)
+            .lineHeight(16)
             .textAlign(TextAlign.Center)
         }
         .layoutWeight(1)
+        .width('100%')
         .height(54)
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
@@ -2931,6 +3591,6 @@ struct Index {
     .backgroundColor(Color.White)
     .borderRadius(24)
     .shadow({ radius: 18, color: '#22000000', offsetX: 0, offsetY: 6 })
-    .margin({ left: 16, right: 16, bottom: 14 })
+    .margin({ bottom: 14 })
   }
 }

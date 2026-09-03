@@ -98,6 +98,12 @@ export interface MerchantItem {
   priceText: string;
   rating: number;
   description: string;
+  offerTitle: string;
+  offerDetails: string;
+  facilities: string[];
+  reviewCount: number;
+  latestReview: string;
+  reviewTime: string;
 }
 
 export interface MallProduct {
@@ -106,6 +112,11 @@ export interface MallProduct {
   price: number;
   points: number;
   description: string;
+}
+
+export interface CartItem {
+  productId: string;
+  quantity: number;
 }
 
 export interface TicketOrder {
@@ -186,9 +197,24 @@ export const DEMO_FACILITIES: ScenicFacility[] = [
 ];
 
 export const DEMO_MERCHANTS: MerchantItem[] = [
-  { id: 'hotel', name: '湖畔精品酒店', category: '住宿', priceText: '￥468 起 / 晚', rating: 4.8, description: '步行可达湖滨，含双早' },
-  { id: 'homestay', name: '南山慢屋民宿', category: '住宿', priceText: '￥328 起 / 晚', rating: 4.7, description: '南山路周边，提供亲子房型' },
-  { id: 'restaurant', name: '西湖味道餐厅', category: '餐饮', priceText: '￥88 起 / 人', rating: 4.9, description: '杭帮菜套餐，支持到店核销' }
+  {
+    id: 'hotel', name: '湖畔精品酒店', category: '住宿', priceText: '￥468 起 / 晚', rating: 4.8,
+    description: '步行 8 分钟到湖滨，含双早与接驳服务', offerTitle: '湖景大床房 · 35㎡',
+    offerDetails: '1.8m 大床 · 含双早 · 14:00 后入住', facilities: ['湖景阳台', '免费停车', '健身房', '自助早餐'],
+    reviewCount: 2316, latestReview: '“房间安静，去断桥和湖滨都很方便，早餐选择也多。”', reviewTime: '刚刚更新'
+  },
+  {
+    id: 'homestay', name: '南山慢屋民宿', category: '住宿', priceText: '￥328 起 / 晚', rating: 4.7,
+    description: '南山路周边，适合亲子与慢游旅客', offerTitle: '亲子家庭房 · 42㎡',
+    offerDetails: '一大床一小床 · 可住 3 人 · 含欢迎水果', facilities: ['亲子洗护', '洗衣房', '行李寄存', '共享露台'],
+    reviewCount: 1684, latestReview: '“老板会推荐错峰路线，孩子很喜欢露台和绘本角。”', reviewTime: '2 分钟前'
+  },
+  {
+    id: 'restaurant', name: '西湖味道餐厅', category: '餐饮', priceText: '￥88 起 / 人', rating: 4.9,
+    description: '杭帮菜套餐，到店报手机号即可用餐', offerTitle: '西湖双人套餐 · 2 人',
+    offerDetails: '东坡肉、龙井虾仁、西湖莼菜汤 · 可选临湖座位', facilities: ['临湖座位', '儿童餐椅', '无障碍通道', '停车 2 小时'],
+    reviewCount: 3568, latestReview: '“上菜很快，临湖座位景色好，预约后到店直接核销。”', reviewTime: '1 分钟前'
+  }
 ];
 
 export const DEMO_PRODUCTS: MallProduct[] = [
@@ -215,5 +241,5 @@ export const DEMO_HISTORY_RECORDS: VisitorHistoryRecord[] = [
   { id: 'history-1', type: '导览', title: '苏堤春晓', detail: '完成 7 分钟图文讲解', time: '今天 09:06' },
   { id: 'history-2', type: '路线', title: '亲子自然线', detail: '已生成 2.5 小时游览方案', time: '今天 09:02' },
   { id: 'history-3', type: '预约', title: '西湖环湖游船', detail: '查看了 10:30 时段余位', time: '昨天 16:18' },
-  { id: 'history-4', type: '商城', title: '雷峰塔金属书签', detail: '浏览过景区文创商品', time: '昨天 16:10' }
+  { id: 'history-4', type: '购物', title: '雷峰塔金属书签', detail: '浏览过景区文创商品', time: '昨天 16:10' }
 ];
