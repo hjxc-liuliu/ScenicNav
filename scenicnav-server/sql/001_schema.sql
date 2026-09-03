@@ -10,6 +10,21 @@ CREATE TABLE users (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE roles (
+  id VARCHAR(36) PRIMARY KEY,
+  code VARCHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(64) NOT NULL,
+  description VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE user_roles (
+  user_id VARCHAR(36) NOT NULL,
+  role_id VARCHAR(36) NOT NULL,
+  PRIMARY KEY (user_id, role_id),
+  CONSTRAINT fk_user_role_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_user_role_role FOREIGN KEY (role_id) REFERENCES roles(id)
+);
+
 CREATE TABLE ticket_products (
   id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(80) NOT NULL,

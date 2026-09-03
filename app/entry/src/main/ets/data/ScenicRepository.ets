@@ -1,4 +1,10 @@
 import {
+  http
+} from '@kit.NetworkKit';
+import {
+  API_BASE_URLS
+} from '../config/ApiConfig';
+import {
   ApiResponse,
   CrowdSnapshot,
   DEMO_MERCHANTS,
@@ -16,6 +22,41 @@ import {
   TicketProduct
 } from '../common/Models';
 
+interface ApiEnvelope {
+  code: number;
+  message: string;
+  data: Object;
+  traceId: string;
+}
+
+interface LoginUser {
+  account: string;
+  nickname: string;
+  roleCode: string;
+  roleName: string;
+  passwordHash: string;
+  points: number;
+}
+
+const DEMO_LOGIN_USERS: LoginUser[] = [
+  {
+    account: 'tourist',
+    nickname: '旅行者',
+    roleCode: 'TOURIST',
+    roleName: '游客',
+    passwordHash: 'demo-password-123456',
+    points: 320
+  },
+  {
+    account: 'admin',
+    nickname: '景区管理员',
+    roleCode: 'ADMIN',
+    roleName: '管理员',
+    passwordHash: 'demo-password-123456',
+    points: 0
+  }
+];
+
 /**
  * 景区数据仓储。正式部署时在本类中接入真实 REST API，页面层无需改动。
  */
@@ -24,15 +65,27 @@ export class ScenicRepository {
   private crowdTick: number = 0;
 
   async login(account: string, password: string): Promise<ApiResponse<string>> {
-    const allowed = (account === 'tourist' || account === 'admin') && password === '123456';
-    const role = account === 'admin' ? 'admin' : 'tourist';
+    const users = await this.fetchList<LoginUser>('/users/demo-accounts', DEMO_LOGIN_USERS);
+    let matched: LoginUser | undefined = undefined;
+    for (let index = 0; index < users.length; index++) {
+      if (users[index].account === account && users[index].passwordHash === `demo-password-${password}`) {
+        matched = users[index];
+      }
+    }
+    const allowed = matched !== undefined;
+    const role = matched !== undefined && matched.roleCode === 'ADMIN' ? 'admin' : 'tourist';
     const response: ApiResponse<string> = {
       code: allowed ? 0 : 401,
       message: allowed ? (role === 'admin' ? '管理员登录成功' : '游客登录成功') : '账号或密码不正确',
       data: allowed ? `mock-token-${role}-001` : '',
       traceId: 'login-demo-001'
     };
-    return Promise.resolve<ApiResponse<string>>(response);
+    return response;
+  }
+
+  async backendAvailable(): Promise<boolean> {
+    const users = await this.fetchList<LoginUser>('/users/demo-accounts', []);
+    return users.length > 0;
   }
 
   tickets(): TicketProduct[] {
@@ -80,6 +133,135 @@ export class ScenicRepository {
 
   products(): MallProduct[] {
     return DEMO_PRODUCTS;
+  }
+
+  async loadTickets(): Promise<TicketProduct[]> {
+    const rows = await this.fetchList<TicketProduct>('/tickets', []);
+    if (rows.length === 0) {
+      return DEMO_TICKETS;
+    }
+    const tickets: TicketProduct[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      tickets.push({
+        id: row.id,
+        name: row.name,
+        price: row.price / 100,
+        remaining: row.remaining,
+        description: row.description
+      });
+    }
+    return tickets;
+  }
+
+  async loadSpots(): Promise<ScenicSpot[]> {
+    const rows = await this.fetchList<ScenicSpot>('/guide/spots', []);
+    if (rows.length === 0) {
+      return DEMO_SPOTS;
+    }
+    const spots: ScenicSpot[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const fallback = index < DEMO_SPOTS.length ? DEMO_SPOTS[index] : DEMO_SPOTS[0];
+      const row = rows[index];
+      spots.push({
+        id: row.id,
+        name: row.name,
+        subtitle: row.subtitle,
+        imageName: fallback.imageName,
+        crowdLevel: this.crowdLevelFromPercent(row.crowdPercent),
+        crowdPercent: row.crowdPercent,
+        x: fallback.x,
+        y: fallback.y,
+        audioMinutes: fallback.audioMinutes,
+        interestTags: fallback.interestTags,
+        stayMinutes: fallback.stayMinutes
+      });
+    }
+    return spots;
+  }
+
+  async loadRoutes(): Promise<RecommendedRoute[]> {
+    const rows = await this.fetchList<Record<string, Object>>('/guide/routes', []);
+    if (rows.length === 0) {
+      return DEMO_ROUTES;
+    }
+    const routes: RecommendedRoute[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      routes.push({
+        id: row['id'] as string,
+        title: row['title'] as string,
+        duration: `${row['durationMinutes'] as number} 分钟`,
+        distance: `${((row['distanceMeters'] as number) / 1000).toFixed(1)} km`,
+        tags: row['tags'] as string[],
+        spots: row['spotIds'] as string[]
+      });
+    }
+    return routes;
+  }
+
+  async loadProjects(): Promise<ProjectReservation[]> {
+    const rows = await this.fetchList<Record<string, Object>>('/reservations/projects', []);
+    if (rows.length === 0) {
+      return DEMO_PROJECTS;
+    }
+    const projects: ProjectReservation[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      projects.push({
+        id: row['projectId'] as string,
+        name: row['name'] as string,
+        category: row['description'] as string,
+        venue: '景区服务点',
+        startTime: row['startTime'] as string,
+        waitMinutes: 20,
+        queueSize: 30,
+        remaining: row['remaining'] as number,
+        capacity: row['capacity'] as number,
+        reminderMinutes: 15,
+        fastPassPrice: (row['fastPassPrice'] as number) / 100
+      });
+    }
+    return projects;
+  }
+
+  async loadMerchants(): Promise<MerchantItem[]> {
+    const rows = await this.fetchList<MerchantItem>('/merchants', []);
+    if (rows.length === 0) {
+      return DEMO_MERCHANTS;
+    }
+    const merchants: MerchantItem[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      merchants.push({
+        id: row.id,
+        name: row.name,
+        category: row.category === 'HOTEL' ? '住宿' : '餐饮',
+        priceText: row.priceText,
+        rating: row.rating,
+        description: row.description
+      });
+    }
+    return merchants;
+  }
+
+  async loadProducts(): Promise<MallProduct[]> {
+    const rows = await this.fetchList<MallProduct>('/mall/products', []);
+    if (rows.length === 0) {
+      return DEMO_PRODUCTS;
+    }
+    const products: MallProduct[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      products.push({
+        id: row.id,
+        name: row.name,
+        price: row.price / 100,
+        points: row.points,
+        description: row.description
+      });
+    }
+    return products;
   }
 
   createTicketOrder(ticket: TicketProduct, visitDate: string): TicketOrder {
@@ -138,5 +320,42 @@ export class ScenicRepository {
       });
     }
     return result;
+  }
+
+  private async fetchList<T>(path: string, fallback: T[]): Promise<T[]> {
+    for (let index = 0; index < API_BASE_URLS.length; index++) {
+      const request = http.createHttp();
+      try {
+        const response = await request.request(`${API_BASE_URLS[index]}${path}`, {
+          method: http.RequestMethod.GET,
+          header: {
+            'Content-Type': 'application/json'
+          },
+          readTimeout: 3000,
+          connectTimeout: 3000
+        });
+        const raw = typeof response.result === 'string' ? response.result : JSON.stringify(response.result);
+        const envelope = JSON.parse(raw) as ApiEnvelope;
+        if (envelope.code === 0) {
+          return envelope.data as T[];
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+    return fallback;
+  }
+
+  private crowdLevelFromPercent(percent: number): string {
+    if (percent <= 45) {
+      return '畅通';
+    }
+    if (percent <= 70) {
+      return '适中';
+    }
+    if (percent <= 85) {
+      return '拥挤';
+    }
+    return '严重拥挤';
   }
 }

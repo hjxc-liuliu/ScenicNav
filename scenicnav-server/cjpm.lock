@@ -1,4 +1,4 @@
 version = 0
 
 [requires]
-  stdx = {git = "https://gitcode.com/Cangjie/cangjie_stdx.git", commitId = "4150e3d70f758231a3295d8b4b6ece5e5476d387", branch = "main", output-type = "dynamic"}
+  mysql = {git = "https://gitcode.com/Cangjie-SIG/mariadb-driver.git", commitId = "8e465fe2d5eaab2aa1c1d8aeb1df0b533e9c81dc", tag = "1.0.0"}

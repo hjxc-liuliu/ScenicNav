@@ -59,15 +59,15 @@ interface DeepSeekRequestBody {
 @Component
 struct Index {
   private readonly viewModel: ScenicViewModel = new ScenicViewModel();
-  private readonly tickets: TicketProduct[] = this.viewModel.repository.tickets();
-  private readonly spots: ScenicSpot[] = this.viewModel.repository.spots();
-  private readonly routes: RecommendedRoute[] = this.viewModel.repository.routes();
-  private readonly projects: ProjectReservation[] = this.viewModel.repository.projects();
-  private readonly merchants: MerchantItem[] = this.viewModel.repository.merchants();
-  private readonly products: MallProduct[] = this.viewModel.repository.products();
   private readonly facilities: ScenicFacility[] = DEMO_FACILITIES;
   private readonly adminOrders: AdminOrderRecord[] = DEMO_ADMIN_ORDERS;
 
+  @State private tickets: TicketProduct[] = this.viewModel.repository.tickets();
+  @State private spots: ScenicSpot[] = this.viewModel.repository.spots();
+  @State private routes: RecommendedRoute[] = this.viewModel.repository.routes();
+  @State private projects: ProjectReservation[] = this.viewModel.repository.projects();
+  @State private merchants: MerchantItem[] = this.viewModel.repository.merchants();
+  @State private products: MallProduct[] = this.viewModel.repository.products();
   @State private activeTab: string = '首页';
   @State private account: string = '';
   @State private password: string = '';
@@ -129,6 +129,7 @@ struct Index {
   private noticeTimerId: number = -1;
 
   aboutToAppear(): void {
+    this.loadRemoteData();
     this.refreshCrowdData();
     this.crowdTimerId = setInterval(() => {
       this.refreshCrowdData();
@@ -136,6 +137,26 @@ struct Index {
     this.homePhotoTimerId = setInterval(() => {
       this.nextHomePhoto();
     }, 3500);
+  }
+
+  private async loadRemoteData(): Promise<void> {
+    this.notice = '正在从景区数据库同步数据...';
+    const backendAvailable = await this.viewModel.repository.backendAvailable();
+    this.tickets = await this.viewModel.repository.loadTickets();
+    this.spots = await this.viewModel.repository.loadSpots();
+    this.routes = await this.viewModel.repository.loadRoutes();
+    this.projects = await this.viewModel.repository.loadProjects();
+    this.merchants = await this.viewModel.repository.loadMerchants();
+    this.products = await this.viewModel.repository.loadProducts();
+    this.ticketIndex = Math.min(this.ticketIndex, Math.max(0, this.tickets.length - 1));
+    if (this.tickets.length > 0 && this.spots.length > 0 && this.routes.length > 0 && this.projects.length > 0 &&
+      this.merchants.length > 0 && this.products.length > 0) {
+      this.notice = '后端已连接，景区数据库数据已同步。';
+    } else if (backendAvailable) {
+      this.notice = '后端已连接，数据库未初始化时可使用演示账号登录。';
+    } else {
+      this.notice = '当前为离线演示模式，可直接使用演示账号登录。';
+    }
   }
 
   aboutToDisappear(): void {
@@ -489,13 +510,24 @@ struct Index {
         .borderRadius(16)
       }, (ticket: TicketProduct) => ticket.id)
 
-      Button(`预订 ${this.tickets[this.ticketIndex].name} · ${this.viewModel.formatPrice(this.tickets[this.ticketIndex].price)}`)
-        .width('100%')
-        .height(48)
-        .backgroundColor('#176B43')
-        .fontColor(Color.White)
-        .borderRadius(24)
-        .onClick(() => this.bookTicket())
+      if (this.tickets.length > 0) {
+        Button(`预订 ${this.tickets[this.ticketIndex].name} · ${this.viewModel.formatPrice(this.tickets[this.ticketIndex].price)}`)
+          .width('100%')
+          .height(48)
+          .backgroundColor('#176B43')
+          .fontColor(Color.White)
+          .borderRadius(24)
+          .onClick(() => this.bookTicket())
+      } else {
+        Text('票务数据未从后端返回')
+          .fontSize(13)
+          .fontColor('#C3621F')
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding(12)
+          .backgroundColor('#FFF3E8')
+          .borderRadius(12)
+      }
 
       this.sectionHeading('今日推荐', '为你避开人群')
       Row({ space: 10 }) {

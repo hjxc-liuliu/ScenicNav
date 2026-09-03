@@ -1,4 +1,4 @@
-package scenicnav
+package scenicnav_server
 
 import std.unittest.*
 import std.unittest.testmacro.*

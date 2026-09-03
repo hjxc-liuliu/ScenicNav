@@ -25,7 +25,7 @@
 3. 选择 HarmonyOS 模拟器或真机，运行 `entry` 模块。
 4. 本地开发阶段可使用内置测试账号 `tourist` 与密码 `123456` 登录；接入正式认证服务后，请使用真实账号体系。
 
-客户端的数据访问集中在 `ScenicRepository`，后续对接正式景区服务时，可在仓储层接入真实票务、客流、支付、地图、短信和推送接口，并遵循 `docs/openapi.yaml`。
+客户端的数据访问集中在 `ScenicRepository`。当前 App 启动后会从 `app/entry/src/main/ets/config/ApiConfig.ets` 配置的后端地址同步票务、景点、路线、预约项目、商户、商城商品和演示账号角色；如果后端不可用，会回退到本地演示数据，保证页面仍可浏览。后续接入正式景区服务时，可继续在仓储层接入真实支付、地图、短信、推送和闸机核验接口，并遵循 `docs/openapi.yaml`。
 
 ### 智能咨询配置
 
@@ -48,11 +48,13 @@ export const AI_API_KEY: string = '你的 API Key';
 ## 服务端运行
 
 1. 安装仓颉 1.0.5 工具链和与其兼容的 stdx 动态库。
-2. 在 `scenicnav-server` 中执行 `cjpm update`，随后执行 `cjpm run`。
-3. 访问 `http://127.0.0.1:8080/health` 验证服务；接口前缀为 `/api/v1`。
-4. 执行 `cjpm test` 运行库存、预约与金额计算测试。
+2. 先启动 MySQL。可以复制 `infra/.env.example` 为 `infra/.env`，再按需修改密码；默认后端连接 `127.0.0.1:3306/scenicnav`，用户 `scenicnav`，密码 `scenicnav`。
+3. 执行 `docker compose --env-file infra/.env -f infra/docker-compose.yml up -d mysql`，容器会自动执行 `scenicnav-server/sql` 下的建表和初始化数据。
+4. 在 `scenicnav-server` 中执行 `cjpm update`，随后执行 `cjpm run`。
+5. 访问 `http://127.0.0.1:8080/health` 验证服务和 MySQL 连接；接口前缀为 `/api/v1`。
+6. 执行 `cjpm test` 运行库存、预约与金额计算测试。
 
-仓颉服务提供 REST API、库存与预约领域逻辑。正式部署时，在仓储适配层调用 `infra/redis_reserve.lua` 完成 Redis 原子扣减，再于同一业务事务内持久化到 MySQL；`scenicnav-server/sql` 已提供完整表结构、唯一幂等键与初始化数据。
+仓颉服务提供 REST API、MySQL 查询、库存与预约领域逻辑。当前票务列表、景点、路线、预约项目、商户和商城商品接口会从 MySQL 读取；创建订单、退款、预约提交、积分和反馈接口仍是演示响应。正式部署时，可在仓储适配层继续接入事务写入，并按需调用 `infra/redis_reserve.lua` 完成 Redis 原子扣减。
 
 ## 基础设施与压测
 

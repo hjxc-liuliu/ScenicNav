@@ -1,5 +1,5 @@
 [package]
-  cjc-version = "1.0.5"
+  cjc-version = "1.0.1"
   name = "scenicnav_server"
   description = "智慧景区旅游服务系统仓颉 REST 服务"
   version = "1.0.0"
@@ -8,6 +8,9 @@
   target-dir = "target"
 
 [dependencies]
-  # stdx 提供 HTTP 服务能力；首次构建时由 cjpm 下载。
-  stdx = { git = "https://gitcode.com/Cangjie/cangjie_stdx.git", branch = "main", output-type = "dynamic" }
+  # MySQL 原生驱动，按 std.database.sql 接口访问 scenicnav 数据库。
+  mysql = { git = "https://gitcode.com/Cangjie-SIG/mariadb-driver.git", tag = "1.0.0" }
 
+[target.x86_64-w64-mingw32]
+  [target.x86_64-w64-mingw32.bin-dependencies]
+    path-option = ["D:\\cj_stdx101\\windows_x86_64_llvm\\dynamic\\stdx"]

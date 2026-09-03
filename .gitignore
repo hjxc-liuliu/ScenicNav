@@ -4,7 +4,13 @@
 **/.preview/
 build/
 **/build/
+target/
+**/target/
+build-script-cache/
+**/build-script-cache/
 **/oh_modules/
 **/.cangjie/
 *.log
+.env
+**/.env
 
