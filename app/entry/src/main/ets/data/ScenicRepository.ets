@@ -233,13 +233,20 @@ export class ScenicRepository {
     const merchants: MerchantItem[] = [];
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
+      const fallback = index < DEMO_MERCHANTS.length ? DEMO_MERCHANTS[index] : DEMO_MERCHANTS[0];
       merchants.push({
         id: row.id,
         name: row.name,
         category: row.category === 'HOTEL' ? '住宿' : '餐饮',
         priceText: row.priceText,
         rating: row.rating,
-        description: row.description
+        description: row.description,
+        offerTitle: fallback.offerTitle,
+        offerDetails: fallback.offerDetails,
+        facilities: fallback.facilities,
+        reviewCount: fallback.reviewCount,
+        latestReview: fallback.latestReview,
+        reviewTime: fallback.reviewTime
       });
     }
     return merchants;
