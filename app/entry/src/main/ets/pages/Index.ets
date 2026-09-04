@@ -1250,9 +1250,14 @@ struct Index {
   private shouldCompareBookingTime(first: BookingRecord, second: BookingRecord): boolean {
     const firstIsHotel = first.kind === 'HOTEL';
     const secondIsHotel = second.kind === 'HOTEL';
+    const firstIsTicket = first.kind === 'TICKET';
+    const secondIsTicket = second.kind === 'TICKET';
     const firstIsScenicActivity = first.kind === 'TICKET' || first.kind === 'PROJECT';
     const secondIsScenicActivity = second.kind === 'TICKET' || second.kind === 'PROJECT';
-    return !(firstIsHotel && secondIsScenicActivity) && !(secondIsHotel && firstIsScenicActivity);
+    const ticketAndProject = (firstIsTicket && second.kind === 'PROJECT')
+      || (secondIsTicket && first.kind === 'PROJECT');
+    return !ticketAndProject && !(firstIsHotel && secondIsScenicActivity)
+      && !(secondIsHotel && firstIsScenicActivity);
   }
 
   private bookingHasFastPass(booking: BookingRecord): boolean {

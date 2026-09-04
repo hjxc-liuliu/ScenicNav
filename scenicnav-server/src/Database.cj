@@ -38,7 +38,9 @@ public class ScenicDatabase {
     public func ticketProductsJson(): String {
         let connection = this.connect()
         let statement = connection.prepareStatement(
-            "select p.id, p.name, p.price_fen, p.description, coalesce(sum(s.total_stock - s.sold_stock), 0) remaining " +
+            "select p.id, p.name, p.price_fen, p.description, coalesce(sum(s.total_stock - s.sold_stock), 0) remaining, " +
+            "date_format(min(timestamp(s.visit_date, s.start_time)), '%Y-%m-%d %H:%i') start_at, " +
+            "date_format(min(timestamp(s.visit_date, s.end_time)), '%Y-%m-%d %H:%i') end_at " +
             "from ticket_products p left join ticket_slots s on p.id = s.ticket_product_id " +
             "where p.enabled = 1 group by p.id, p.name, p.price_fen, p.description order by p.price_fen"
         )
@@ -50,7 +52,9 @@ public class ScenicDatabase {
                 "\"name\":\"${escapeJson(result.get<String>(2))}\"," +
                 "\"price\":${result.get<Int32>(3)}," +
                 "\"description\":\"${escapeJson(result.get<String>(4))}\"," +
-                "\"remaining\":${result.get<Int64>(5)}}"
+                "\"remaining\":${result.get<Int64>(5)}," +
+                "\"startAt\":\"${escapeJson(result.get<String>(6))}\"," +
+                "\"endAt\":\"${escapeJson(result.get<String>(7))}\"}"
             )
         }
         return "[${String.join(rows.toArray(), delimiter: ",")}]"
@@ -121,23 +125,32 @@ public class ScenicDatabase {
         let connection = this.connect()
         let statement = connection.prepareStatement(
             "select ps.id, p.id, p.name, p.description, date_format(ps.start_at, '%H:%i') start_time, " +
-            "ps.capacity, ps.reserved_count, p.fast_pass_price_fen " +
+            "date_format(ps.end_at, '%H:%i') end_time, date_format(ps.start_at, '%Y-%m-%d %H:%i') start_at, " +
+            "date_format(ps.end_at, '%Y-%m-%d %H:%i') end_at, ps.capacity, ps.reserved_count, p.fast_pass_price_fen, " +
+            "ps.fast_pass_capacity, ps.fast_pass_reserved_count " +
             "from project_slots ps join projects p on ps.project_id = p.id where p.enabled = 1 order by ps.start_at"
         )
         let result = statement.query()
         var rows = ArrayList<String>()
         while (result.next()) {
-            let capacity = result.get<Int32>(6)
-            let reserved = result.get<Int32>(7)
+            let capacity = result.get<Int32>(9)
+            let reserved = result.get<Int32>(10)
+            let fastPassCapacity = result.get<Int32>(12)
+            let fastPassReserved = result.get<Int32>(13)
             rows.add(
                 "{\"slotId\":\"${escapeJson(result.get<String>(1))}\"," +
                 "\"projectId\":\"${escapeJson(result.get<String>(2))}\"," +
                 "\"name\":\"${escapeJson(result.get<String>(3))}\"," +
                 "\"description\":\"${escapeJson(result.get<String>(4))}\"," +
                 "\"startTime\":\"${escapeJson(result.get<String>(5))}\"," +
+                "\"endTime\":\"${escapeJson(result.get<String>(6))}\"," +
+                "\"startAt\":\"${escapeJson(result.get<String>(7))}\"," +
+                "\"endAt\":\"${escapeJson(result.get<String>(8))}\"," +
                 "\"capacity\":${capacity}," +
                 "\"remaining\":${capacity - reserved}," +
-                "\"fastPassPrice\":${result.get<Int32>(8)}}"
+                "\"fastPassPrice\":${result.get<Int32>(11)}," +
+                "\"fastPassCapacity\":${fastPassCapacity}," +
+                "\"fastPassRemaining\":${fastPassCapacity - fastPassReserved}}"
             )
         }
         return "[${String.join(rows.toArray(), delimiter: ",")}]"
@@ -146,7 +159,11 @@ public class ScenicDatabase {
     public func merchantsJson(): String {
         let connection = this.connect()
         let statement = connection.prepareStatement(
-            "select id, merchant_type, name, rating, price_text, description from merchants where enabled = 1 order by rating desc"
+            "select m.id, m.merchant_type, m.name, m.rating, m.price_text, m.description, " +
+            "date_format(min(s.start_at), '%Y-%m-%d %H:%i') booking_start_at, " +
+            "date_format(max(s.end_at), '%Y-%m-%d %H:%i') booking_end_at " +
+            "from merchants m left join merchant_booking_slots s on m.id = s.merchant_id " +
+            "where m.enabled = 1 group by m.id, m.merchant_type, m.name, m.rating, m.price_text, m.description order by m.rating desc"
         )
         let result = statement.query()
         var rows = ArrayList<String>()
@@ -157,7 +174,9 @@ public class ScenicDatabase {
                 "\"name\":\"${escapeJson(result.get<String>(3))}\"," +
                 "\"rating\":${result.get<Float64>(4)}," +
                 "\"priceText\":\"${escapeJson(result.get<String>(5))}\"," +
-                "\"description\":\"${escapeJson(result.get<String>(6))}\"}"
+                "\"description\":\"${escapeJson(result.get<String>(6))}\"," +
+                "\"bookingStartAt\":\"${escapeJson(result.get<String>(7))}\"," +
+                "\"bookingEndAt\":\"${escapeJson(result.get<String>(8))}\"}"
             )
         }
         return "[${String.join(rows.toArray(), delimiter: ",")}]"

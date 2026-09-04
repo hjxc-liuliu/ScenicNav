@@ -35,9 +35,9 @@ func demoAccountsFallbackJson(): String {
 
 func demoTicketsJson(): String {
     return "[" +
-        "{\"id\":\"boat\",\"name\":\"西湖环湖游船票\",\"price\":5500,\"remaining\":128,\"description\":\"花港码头登船，含湖上讲解\"}," +
-        "{\"id\":\"leifeng\",\"name\":\"雷峰塔参观票\",\"price\":4000,\"remaining\":76,\"description\":\"分时入塔，含电子验票码\"}," +
-        "{\"id\":\"premium\",\"name\":\"西湖优享联票\",\"price\":12800,\"remaining\":36,\"description\":\"游船、讲解与快速通行权益组合\"}" +
+        "{\"id\":\"boat\",\"name\":\"西湖环湖游船票\",\"price\":5500,\"remaining\":128,\"description\":\"花港码头登船，含湖上讲解\",\"startAt\":\"2026-09-03 09:00\",\"endAt\":\"2026-09-03 10:00\"}," +
+        "{\"id\":\"leifeng\",\"name\":\"雷峰塔参观票\",\"price\":4000,\"remaining\":76,\"description\":\"分时入塔，含电子验票码\",\"startAt\":\"2026-09-03 15:10\",\"endAt\":\"2026-09-03 16:10\"}," +
+        "{\"id\":\"premium\",\"name\":\"西湖优享联票\",\"price\":12800,\"remaining\":36,\"description\":\"游船、讲解与快速通行权益组合\",\"startAt\":\"2026-09-03 19:00\",\"endAt\":\"2026-09-03 21:10\"}" +
         "]"
 }
 
@@ -62,18 +62,18 @@ func demoRoutesJson(): String {
 
 func demoProjectsJson(): String {
     return "[" +
-        "{\"slotId\":\"ps-boat-1030\",\"projectId\":\"boat\",\"name\":\"西湖环湖游船\",\"description\":\"游船\",\"startTime\":\"10:30\",\"capacity\":60,\"remaining\":18,\"fastPassPrice\":1800}," +
-        "{\"slotId\":\"ps-show-1930\",\"projectId\":\"night_show\",\"name\":\"西湖夜游沉浸演出\",\"description\":\"演出\",\"startTime\":\"19:30\",\"capacity\":120,\"remaining\":56,\"fastPassPrice\":2800}," +
-        "{\"slotId\":\"ps-class-1420\",\"projectId\":\"nature_class\",\"name\":\"花港亲子自然课堂\",\"description\":\"亲子活动\",\"startTime\":\"14:20\",\"capacity\":30,\"remaining\":9,\"fastPassPrice\":1200}," +
-        "{\"slotId\":\"ps-tower-1540\",\"projectId\":\"tower_tour\",\"name\":\"雷峰塔深度讲解团\",\"description\":\"讲解\",\"startTime\":\"15:40\",\"capacity\":35,\"remaining\":14,\"fastPassPrice\":2000}" +
+        "{\"slotId\":\"ps-boat-1030\",\"projectId\":\"boat\",\"name\":\"西湖环湖游船\",\"description\":\"游船\",\"startTime\":\"10:30\",\"endTime\":\"11:30\",\"startAt\":\"2026-09-03 10:30\",\"endAt\":\"2026-09-03 11:30\",\"capacity\":60,\"remaining\":18,\"fastPassPrice\":1800,\"fastPassCapacity\":12,\"fastPassRemaining\":8}," +
+        "{\"slotId\":\"ps-show-1930\",\"projectId\":\"night_show\",\"name\":\"西湖夜游沉浸演出\",\"description\":\"演出\",\"startTime\":\"19:30\",\"endTime\":\"21:00\",\"startAt\":\"2026-09-03 19:30\",\"endAt\":\"2026-09-03 21:00\",\"capacity\":120,\"remaining\":56,\"fastPassPrice\":2800,\"fastPassCapacity\":24,\"fastPassRemaining\":20}," +
+        "{\"slotId\":\"ps-class-1420\",\"projectId\":\"nature_class\",\"name\":\"花港亲子自然课堂\",\"description\":\"亲子活动\",\"startTime\":\"14:20\",\"endTime\":\"15:20\",\"startAt\":\"2026-09-03 14:20\",\"endAt\":\"2026-09-03 15:20\",\"capacity\":30,\"remaining\":9,\"fastPassPrice\":1200,\"fastPassCapacity\":6,\"fastPassRemaining\":4}," +
+        "{\"slotId\":\"ps-tower-1540\",\"projectId\":\"tower_tour\",\"name\":\"雷峰塔深度讲解团\",\"description\":\"讲解\",\"startTime\":\"15:40\",\"endTime\":\"16:50\",\"startAt\":\"2026-09-03 15:40\",\"endAt\":\"2026-09-03 16:50\",\"capacity\":35,\"remaining\":14,\"fastPassPrice\":2000,\"fastPassCapacity\":8,\"fastPassRemaining\":6}" +
         "]"
 }
 
 func demoMerchantsJson(): String {
     return "[" +
-        "{\"id\":\"hotel\",\"category\":\"HOTEL\",\"name\":\"湖畔精品酒店\",\"rating\":4.8,\"priceText\":\"￥468 起 / 晚\",\"description\":\"步行可达湖滨，含双早\"}," +
-        "{\"id\":\"homestay\",\"category\":\"HOTEL\",\"name\":\"南山慢屋民宿\",\"rating\":4.7,\"priceText\":\"￥328 起 / 晚\",\"description\":\"南山路周边，提供亲子房型\"}," +
-        "{\"id\":\"restaurant\",\"category\":\"RESTAURANT\",\"name\":\"西湖味道餐厅\",\"rating\":4.9,\"priceText\":\"￥88 起 / 人\",\"description\":\"杭帮菜套餐，支持到店核销\"}" +
+        "{\"id\":\"hotel\",\"category\":\"HOTEL\",\"name\":\"湖畔精品酒店\",\"rating\":4.8,\"priceText\":\"￥468 起 / 晚\",\"description\":\"步行可达湖滨，含双早\",\"bookingStartAt\":\"2026-09-03 14:00\",\"bookingEndAt\":\"2026-09-04 12:00\"}," +
+        "{\"id\":\"homestay\",\"category\":\"HOTEL\",\"name\":\"南山慢屋民宿\",\"rating\":4.7,\"priceText\":\"￥328 起 / 晚\",\"description\":\"南山路周边，提供亲子房型\",\"bookingStartAt\":\"2026-09-03 14:00\",\"bookingEndAt\":\"2026-09-04 12:00\"}," +
+        "{\"id\":\"restaurant\",\"category\":\"RESTAURANT\",\"name\":\"西湖味道餐厅\",\"rating\":4.9,\"priceText\":\"￥88 起 / 人\",\"description\":\"杭帮菜套餐，支持到店核销\",\"bookingStartAt\":\"2026-09-03 12:00\",\"bookingEndAt\":\"2026-09-03 13:00\"}" +
         "]"
 }
 

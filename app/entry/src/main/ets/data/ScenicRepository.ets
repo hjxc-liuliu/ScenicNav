@@ -143,12 +143,15 @@ export class ScenicRepository {
     const tickets: TicketProduct[] = [];
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
+      const fallback = index < DEMO_TICKETS.length ? DEMO_TICKETS[index] : DEMO_TICKETS[0];
       tickets.push({
         id: row.id,
         name: row.name,
         price: row.price / 100,
         remaining: row.remaining,
-        description: row.description
+        description: row.description,
+        startAt: row.startAt.length > 0 ? row.startAt : fallback.startAt,
+        endAt: row.endAt.length > 0 ? row.endAt : fallback.endAt
       });
     }
     return tickets;
@@ -214,12 +217,17 @@ export class ScenicRepository {
         category: row['description'] as string,
         venue: '景区服务点',
         startTime: row['startTime'] as string,
+        endTime: row['endTime'] as string,
+        startAt: row['startAt'] as string,
+        endAt: row['endAt'] as string,
         waitMinutes: 20,
         queueSize: 30,
         remaining: row['remaining'] as number,
         capacity: row['capacity'] as number,
         reminderMinutes: 15,
-        fastPassPrice: (row['fastPassPrice'] as number) / 100
+        fastPassPrice: (row['fastPassPrice'] as number) / 100,
+        fastPassRemaining: row['fastPassRemaining'] as number,
+        fastPassCapacity: row['fastPassCapacity'] as number
       });
     }
     return projects;
@@ -246,7 +254,9 @@ export class ScenicRepository {
         facilities: fallback.facilities,
         reviewCount: fallback.reviewCount,
         latestReview: fallback.latestReview,
-        reviewTime: fallback.reviewTime
+        reviewTime: fallback.reviewTime,
+        bookingStartAt: row.bookingStartAt.length > 0 ? row.bookingStartAt : fallback.bookingStartAt,
+        bookingEndAt: row.bookingEndAt.length > 0 ? row.bookingEndAt : fallback.bookingEndAt
       });
     }
     return merchants;
