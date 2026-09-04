@@ -4,6 +4,8 @@ export interface TicketProduct {
   price: number;
   remaining: number;
   description: string;
+  startAt: string;
+  endAt: string;
 }
 
 export interface ScenicSpot {
@@ -66,19 +68,39 @@ export interface ProjectReservation {
   category: string;
   venue: string;
   startTime: string;
+  endTime: string;
+  startAt: string;
+  endAt: string;
   waitMinutes: number;
   queueSize: number;
   remaining: number;
   capacity: number;
   reminderMinutes: number;
   fastPassPrice: number;
+  fastPassRemaining: number;
+  fastPassCapacity: number;
 }
 
-export interface ProjectBooking {
-  projectId: string;
-  fastPass: boolean;
-  reminderEnabled: boolean;
+export interface BookingAddon {
+  type: string;
+  name: string;
+  price: number;
   status: string;
+}
+
+/** 所有可占用游客行程的订单统一使用该结构。 */
+export interface BookingRecord {
+  id: string;
+  kind: string;
+  resourceId: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  status: string;
+  cancellableUntil: string;
+  reminderEnabled: boolean;
+  addons: BookingAddon[];
+  qrPayload: string;
 }
 
 export interface ScenicFacility {
@@ -104,6 +126,8 @@ export interface MerchantItem {
   reviewCount: number;
   latestReview: string;
   reviewTime: string;
+  bookingStartAt: string;
+  bookingEndAt: string;
 }
 
 export interface MallProduct {
@@ -160,9 +184,9 @@ export interface ApiResponse<T> {
 }
 
 export const DEMO_TICKETS: TicketProduct[] = [
-  { id: 'boat', name: '西湖环湖游船票', price: 55, remaining: 128, description: '花港码头登船，含湖上讲解' },
-  { id: 'leifeng', name: '雷峰塔参观票', price: 40, remaining: 76, description: '分时入塔，含电子验票码' },
-  { id: 'premium', name: '西湖优享联票', price: 128, remaining: 36, description: '游船、讲解与快速通行权益组合' }
+  { id: 'boat', name: '西湖环湖游船票', price: 55, remaining: 128, description: '花港码头登船，含湖上讲解', startAt: '2026-09-03 09:00', endAt: '2026-09-03 10:00' },
+  { id: 'leifeng', name: '雷峰塔参观票', price: 40, remaining: 76, description: '分时入塔，含电子验票码', startAt: '2026-09-03 15:10', endAt: '2026-09-03 16:10' },
+  { id: 'premium', name: '西湖优享联票', price: 128, remaining: 36, description: '游船、讲解与快速通行权益组合', startAt: '2026-09-03 19:00', endAt: '2026-09-03 21:10' }
 ];
 
 export const DEMO_SPOTS: ScenicSpot[] = [
@@ -181,10 +205,10 @@ export const DEMO_ROUTES: RecommendedRoute[] = [
 ];
 
 export const DEMO_PROJECTS: ProjectReservation[] = [
-  { id: 'boat', name: '西湖环湖游船', category: '游船', venue: '花港码头', startTime: '10:30', waitMinutes: 28, queueSize: 46, remaining: 18, capacity: 60, reminderMinutes: 15, fastPassPrice: 18 },
-  { id: 'night_show', name: '西湖夜游沉浸演出', category: '演出', venue: '湖滨水上舞台', startTime: '19:30', waitMinutes: 16, queueSize: 23, remaining: 56, capacity: 120, reminderMinutes: 30, fastPassPrice: 28 },
-  { id: 'nature_class', name: '花港亲子自然课堂', category: '亲子活动', venue: '花港观鱼草坪', startTime: '14:20', waitMinutes: 12, queueSize: 15, remaining: 9, capacity: 30, reminderMinutes: 10, fastPassPrice: 12 },
-  { id: 'tower_tour', name: '雷峰塔深度讲解团', category: '讲解', venue: '雷峰塔东侧集合点', startTime: '15:40', waitMinutes: 34, queueSize: 42, remaining: 14, capacity: 35, reminderMinutes: 15, fastPassPrice: 20 }
+  { id: 'boat', name: '西湖环湖游船', category: '游船', venue: '花港码头', startTime: '10:30', endTime: '11:30', startAt: '2026-09-03 10:30', endAt: '2026-09-03 11:30', waitMinutes: 28, queueSize: 46, remaining: 18, capacity: 60, reminderMinutes: 15, fastPassPrice: 18, fastPassRemaining: 8, fastPassCapacity: 12 },
+  { id: 'night_show', name: '西湖夜游沉浸演出', category: '演出', venue: '湖滨水上舞台', startTime: '19:30', endTime: '21:00', startAt: '2026-09-03 19:30', endAt: '2026-09-03 21:00', waitMinutes: 16, queueSize: 23, remaining: 56, capacity: 120, reminderMinutes: 30, fastPassPrice: 28, fastPassRemaining: 20, fastPassCapacity: 24 },
+  { id: 'nature_class', name: '花港亲子自然课堂', category: '亲子活动', venue: '花港观鱼草坪', startTime: '14:20', endTime: '15:20', startAt: '2026-09-03 14:20', endAt: '2026-09-03 15:20', waitMinutes: 12, queueSize: 15, remaining: 9, capacity: 30, reminderMinutes: 10, fastPassPrice: 12, fastPassRemaining: 4, fastPassCapacity: 6 },
+  { id: 'tower_tour', name: '雷峰塔深度讲解团', category: '讲解', venue: '雷峰塔东侧集合点', startTime: '15:40', endTime: '16:50', startAt: '2026-09-03 15:40', endAt: '2026-09-03 16:50', waitMinutes: 34, queueSize: 42, remaining: 14, capacity: 35, reminderMinutes: 15, fastPassPrice: 20, fastPassRemaining: 6, fastPassCapacity: 8 }
 ];
 
 export const DEMO_FACILITIES: ScenicFacility[] = [
@@ -201,19 +225,22 @@ export const DEMO_MERCHANTS: MerchantItem[] = [
     id: 'hotel', name: '湖畔精品酒店', category: '住宿', priceText: '￥468 起 / 晚', rating: 4.8,
     description: '步行 8 分钟到湖滨，含双早与接驳服务', offerTitle: '湖景大床房 · 35㎡',
     offerDetails: '1.8m 大床 · 含双早 · 14:00 后入住', facilities: ['湖景阳台', '免费停车', '健身房', '自助早餐'],
-    reviewCount: 2316, latestReview: '“房间安静，去断桥和湖滨都很方便，早餐选择也多。”', reviewTime: '刚刚更新'
+    reviewCount: 2316, latestReview: '“房间安静，去断桥和湖滨都很方便，早餐选择也多。”', reviewTime: '刚刚更新',
+    bookingStartAt: '2026-09-03 14:00', bookingEndAt: '2026-09-04 12:00'
   },
   {
     id: 'homestay', name: '南山慢屋民宿', category: '住宿', priceText: '￥328 起 / 晚', rating: 4.7,
     description: '南山路周边，适合亲子与慢游旅客', offerTitle: '亲子家庭房 · 42㎡',
     offerDetails: '一大床一小床 · 可住 3 人 · 含欢迎水果', facilities: ['亲子洗护', '洗衣房', '行李寄存', '共享露台'],
-    reviewCount: 1684, latestReview: '“老板会推荐错峰路线，孩子很喜欢露台和绘本角。”', reviewTime: '2 分钟前'
+    reviewCount: 1684, latestReview: '“老板会推荐错峰路线，孩子很喜欢露台和绘本角。”', reviewTime: '2 分钟前',
+    bookingStartAt: '2026-09-03 14:00', bookingEndAt: '2026-09-04 12:00'
   },
   {
     id: 'restaurant', name: '西湖味道餐厅', category: '餐饮', priceText: '￥88 起 / 人', rating: 4.9,
     description: '杭帮菜套餐，到店报手机号即可用餐', offerTitle: '西湖双人套餐 · 2 人',
     offerDetails: '东坡肉、龙井虾仁、西湖莼菜汤 · 可选临湖座位', facilities: ['临湖座位', '儿童餐椅', '无障碍通道', '停车 2 小时'],
-    reviewCount: 3568, latestReview: '“上菜很快，临湖座位景色好，预约后到店直接核销。”', reviewTime: '1 分钟前'
+    reviewCount: 3568, latestReview: '“上菜很快，临湖座位景色好，预约后到店直接核销。”', reviewTime: '1 分钟前',
+    bookingStartAt: '2026-09-03 12:00', bookingEndAt: '2026-09-03 13:00'
   }
 ];
 

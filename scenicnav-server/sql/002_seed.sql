@@ -14,9 +14,14 @@ INSERT INTO user_roles (user_id, role_id) VALUES
 ('u-002', 'role-admin');
 
 INSERT INTO ticket_products (id, name, ticket_type, price_fen, description) VALUES
-('adult', '成人全日票', 'ADULT', 12800, '含核心景点与观光接驳'),
-('student', '学生优惠票', 'STUDENT', 7800, '入园时出示有效学生证'),
-('family', '亲子家庭套票', 'FAMILY', 29800, '两大一小，含儿童互动体验');
+  ('adult', '成人全日票', 'ADULT', 12800, '含核心景点与观光接驳'),
+  ('student', '学生优惠票', 'STUDENT', 7800, '入园时出示有效学生证'),
+  ('family', '亲子家庭套票', 'FAMILY', 29800, '两大一小，含儿童互动体验');
+
+INSERT INTO ticket_slots (id, ticket_product_id, visit_date, start_time, end_time, total_stock, sold_stock) VALUES
+  ('ticket-slot-adult-0900', 'adult', '2026-09-03', '09:00:00', '10:00:00', 256, 0),
+  ('ticket-slot-student-1510', 'student', '2026-09-03', '15:10:00', '16:10:00', 88, 0),
+  ('ticket-slot-family-1900', 'family', '2026-09-03', '19:00:00', '21:10:00', 32, 0);
 
 INSERT INTO ticket_slots (id, ticket_product_id, visit_date, start_time, end_time, total_stock, sold_stock) VALUES
 ('slot-adult-am', 'adult', '2026-09-03', '08:30:00', '12:00:00', 180, 42),
@@ -43,16 +48,21 @@ INSERT INTO projects (id, name, description, fast_pass_price_fen) VALUES
 ('ropeway', '高山索道', '高山观景索道', 2500),
 ('tower_tour', '雷峰塔深度讲解团', '雷峰塔文化讲解集合项目', 2000);
 
-INSERT INTO project_slots (id, project_id, start_at, capacity, reserved_count) VALUES
-('ps-rafting-1030', 'rafting', '2026-09-03 10:30:00', 60, 48),
-('ps-show-1400', 'show', '2026-09-03 14:00:00', 120, 74),
-('ps-ropeway-1540', 'ropeway', '2026-09-03 15:40:00', 80, 43),
-('ps-tower-1540', 'tower_tour', '2026-09-03 15:40:00', 35, 21);
+INSERT INTO project_slots (id, project_id, start_at, end_at, capacity, reserved_count, fast_pass_capacity, fast_pass_reserved_count) VALUES
+  ('project-slot-rafting-1030', 'rafting', '2026-09-03 10:30:00', '2026-09-03 11:30:00', 60, 42, 12, 4),
+  ('project-slot-show-1400', 'show', '2026-09-03 14:00:00', '2026-09-03 15:30:00', 120, 74, 24, 4),
+  ('project-slot-ropeway-1540', 'ropeway', '2026-09-03 15:40:00', '2026-09-03 16:50:00', 35, 21, 8, 2),
+  ('ps-tower-1540', 'tower_tour', '2026-09-03 15:40:00', '2026-09-03 16:50:00', 35, 21, 8, 2);
 
 INSERT INTO merchants (id, merchant_type, name, rating, price_text, description) VALUES
 ('hotel', 'HOTEL', '云栖山居酒店', 4.8, '￥468 起 / 晚', '步行 5 分钟至景区入口，含双早'),
 ('homestay', 'HOTEL', '溪畔慢屋民宿', 4.7, '￥288 起 / 晚', '山景露台与亲子房型'),
-('restaurant', 'RESTAURANT', '山野食集', 4.9, '￥68 起 / 人', '本地时令食材，支持到店核销');
+  ('restaurant', 'RESTAURANT', '山野食集', 4.9, '￥68 起 / 人', '本地时令食材，支持到店核销');
+
+INSERT INTO merchant_booking_slots (id, merchant_id, start_at, end_at, capacity, reserved_count) VALUES
+  ('merchant-slot-hotel-0903', 'hotel', '2026-09-03 14:00:00', '2026-09-04 12:00:00', 20, 2),
+  ('merchant-slot-homestay-0903', 'homestay', '2026-09-03 14:00:00', '2026-09-04 12:00:00', 12, 1),
+  ('merchant-slot-restaurant-1200', 'restaurant', '2026-09-03 12:00:00', '2026-09-03 13:00:00', 40, 6);
 
 INSERT INTO mall_products (id, name, price_fen, points_reward, stock, description) VALUES
 ('tea', '云雾红茶礼盒', 9900, 99, 100, '景区联名，支持邮寄到家'),

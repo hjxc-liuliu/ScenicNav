@@ -95,8 +95,11 @@ CREATE TABLE project_slots (
   id VARCHAR(36) PRIMARY KEY,
   project_id VARCHAR(36) NOT NULL,
   start_at DATETIME NOT NULL,
+  end_at DATETIME NOT NULL,
   capacity INT NOT NULL,
   reserved_count INT NOT NULL DEFAULT 0,
+  fast_pass_capacity INT NOT NULL DEFAULT 0,
+  fast_pass_reserved_count INT NOT NULL DEFAULT 0,
   version INT NOT NULL DEFAULT 0,
   UNIQUE KEY uk_project_slot (project_id, start_at),
   CONSTRAINT fk_project_slot_project FOREIGN KEY (project_id) REFERENCES projects(id)
@@ -123,6 +126,65 @@ CREATE TABLE merchants (
   price_text VARCHAR(80) NOT NULL,
   description VARCHAR(255) NOT NULL,
   enabled TINYINT NOT NULL DEFAULT 1
+);
+
+CREATE TABLE merchant_booking_slots (
+  id VARCHAR(36) PRIMARY KEY,
+  merchant_id VARCHAR(36) NOT NULL,
+  start_at DATETIME NOT NULL,
+  end_at DATETIME NOT NULL,
+  capacity INT NOT NULL,
+  reserved_count INT NOT NULL DEFAULT 0,
+  version INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_merchant_booking_slot (merchant_id, start_at, end_at),
+  CONSTRAINT fk_merchant_booking_slot_merchant FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+);
+
+CREATE TABLE merchant_bookings (
+  id VARCHAR(36) PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL,
+  merchant_booking_slot_id VARCHAR(36) NOT NULL,
+  idempotency_key VARCHAR(80) NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  cancellable_until DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cancelled_at DATETIME,
+  UNIQUE KEY uk_merchant_booking_idempotency (user_id, idempotency_key),
+  CONSTRAINT fk_merchant_booking_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_merchant_booking_slot FOREIGN KEY (merchant_booking_slot_id) REFERENCES merchant_booking_slots(id)
+);
+
+/*
+  统一行程占用记录。创建、取消、换订均须在同一事务内同时维护来源订单、
+  本表和对应库存；冲突查询只检索 status = 'CONFIRMED' 的记录。
+*/
+CREATE TABLE schedule_bookings (
+  id VARCHAR(36) PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL,
+  booking_kind VARCHAR(24) NOT NULL,
+  resource_id VARCHAR(36) NOT NULL,
+  source_booking_id VARCHAR(36) NOT NULL,
+  start_at DATETIME NOT NULL,
+  end_at DATETIME NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  cancellable_until DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cancelled_at DATETIME,
+  CONSTRAINT fk_schedule_booking_user FOREIGN KEY (user_id) REFERENCES users(id),
+  INDEX idx_schedule_booking_overlap (user_id, status, start_at, end_at),
+  UNIQUE KEY uk_schedule_booking_source (booking_kind, source_booking_id)
+);
+
+CREATE TABLE booking_addons (
+  id VARCHAR(36) PRIMARY KEY,
+  schedule_booking_id VARCHAR(36) NOT NULL,
+  addon_type VARCHAR(24) NOT NULL,
+  price_fen INT NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cancelled_at DATETIME,
+  UNIQUE KEY uk_booking_addon_type (schedule_booking_id, addon_type),
+  CONSTRAINT fk_booking_addon_schedule FOREIGN KEY (schedule_booking_id) REFERENCES schedule_bookings(id)
 );
 
 CREATE TABLE mall_products (

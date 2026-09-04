@@ -112,6 +112,24 @@ func registerRoutes(server: Server): Unit {
     server.distributor.register("/api/v1/orders/tickets/T-20260903-001/cancel", { context =>
         respond(context, "{\"id\":\"T-20260903-001\",\"status\":\"CANCELLED\",\"stockReleased\":true}", "ticket-cancel-001")
     })
+    server.distributor.register("/api/v1/bookings/me", { context =>
+        respond(context, "[{\"id\":\"B-20260903-001\",\"kind\":\"PROJECT\",\"resourceId\":\"show\",\"startAt\":\"2026-09-03T19:30:00+08:00\",\"endAt\":\"2026-09-03T21:00:00+08:00\",\"status\":\"CONFIRMED\",\"cancellableUntil\":\"2026-09-03T18:30:00+08:00\",\"addons\":[{\"type\":\"FAST_PASS\",\"status\":\"CONFIRMED\",\"priceFen\":2800}]}]", "booking-list-001")
+    })
+    server.distributor.register("/api/v1/bookings/precheck", { context =>
+        respond(context, "{\"conflicts\":[]}", "booking-precheck-001")
+    })
+    server.distributor.register("/api/v1/bookings", { context =>
+        respond(context, "{\"id\":\"B-20260903-002\",\"status\":\"CONFIRMED\",\"stockReserved\":true}", "booking-create-001")
+    })
+    server.distributor.register("/api/v1/bookings/B-20260903-001/cancel", { context =>
+        respond(context, "{\"id\":\"B-20260903-001\",\"status\":\"CANCELLED\",\"stockReleased\":true,\"fastPassReleased\":true}", "booking-cancel-001")
+    })
+    server.distributor.register("/api/v1/bookings/B-20260903-001/addons/fast-pass", { context =>
+        respond(context, "{\"bookingId\":\"B-20260903-001\",\"addon\":{\"type\":\"FAST_PASS\",\"status\":\"CONFIRMED\",\"priceFen\":2800}}", "booking-fast-pass-001")
+    })
+    server.distributor.register("/api/v1/bookings/replace", { context =>
+        respond(context, "{\"id\":\"B-20260903-003\",\"status\":\"CONFIRMED\",\"replacedBookingIds\":[\"B-20260903-001\"]}", "booking-replace-001")
+    })
     server.distributor.register("/api/v1/guide/spots", { context =>
         respondDb(context, "guide-spots-001", { => database.scenicSpotsJson() }, demoSpotsJson())
     })

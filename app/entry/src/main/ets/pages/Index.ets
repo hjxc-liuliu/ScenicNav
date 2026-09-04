@@ -9,6 +9,8 @@ import {
 } from '../config/AiConfig';
 import {
   AdminOrderRecord,
+  BookingAddon,
+  BookingRecord,
   CartItem,
   ChatMessage,
   CrowdSnapshot,
@@ -18,14 +20,12 @@ import {
   DEMO_HISTORY_RECORDS,
   MallProduct,
   MerchantItem,
-  ProjectBooking,
   ProjectReservation,
   ItineraryPlan,
   ItineraryProfile,
   RecommendedRoute,
   ScenicFacility,
   ScenicSpot,
-  TicketOrder,
   TicketProduct,
   VisitorHistoryRecord
 } from '../common/Models';
@@ -55,6 +55,229 @@ interface DeepSeekRequestBody {
   max_tokens: number;
 }
 
+interface ItineraryPlanCardParameter {
+  plan: ItineraryPlan;
+}
+
+@CustomDialog
+struct CancelBookingDialog {
+  controller?: CustomDialogController;
+  bookingTitle: string = '';
+  bookingType: string = '';
+  bookingTimeRange: string = '';
+  cancellationRule: string = '';
+  onKeep: () => void = () => {};
+  onConfirm: () => void = () => {};
+
+  build() {
+    Column({ space: 14 }) {
+      Row({ space: 11 }) {
+        Text('◷')
+          .fontSize(22)
+          .fontColor('#176B43')
+          .width(38)
+          .height(38)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 6 })
+          .backgroundColor('#E5F2E9')
+          .borderRadius(19)
+        Column({ space: 3 }) {
+          Text('确认取消预约')
+            .fontSize(19)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text('取消后将释放对应时段库存')
+            .fontSize(12)
+            .fontColor('#D9EFE1')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor('#176B43')
+      .borderRadius(16)
+
+      Column({ space: 5 }) {
+        Text(this.bookingTitle)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#24362B')
+        Text(this.bookingTimeRange)
+          .fontSize(12)
+          .fontColor('#587064')
+        Text(`${this.bookingType} · 已确认`)
+          .fontSize(12)
+          .fontColor('#28764C')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding(14)
+      .backgroundColor('#E5F2E9')
+      .borderRadius(14)
+
+      Row({ space: 9 }) {
+        Text('!')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#C85C28')
+          .width(22)
+          .height(22)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 2 })
+          .backgroundColor('#FFE0CB')
+          .borderRadius(11)
+        Text(`${this.cancellationRule}，取消后库存会实时释放。`)
+          .fontSize(12)
+          .lineHeight(18)
+          .fontColor('#9A592D')
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+      .padding(12)
+      .backgroundColor('#FFF0E7')
+      .borderRadius(12)
+
+      Row({ space: 10 }) {
+        Button('暂不取消')
+          .layoutWeight(1)
+          .height(44)
+          .fontSize(14)
+          .fontColor('#176B43')
+          .backgroundColor('#E5F2E9')
+          .borderRadius(22)
+          .onClick(() => this.onKeep())
+        Button('确认取消')
+          .layoutWeight(1)
+          .height(44)
+          .fontSize(14)
+          .fontColor(Color.White)
+          .backgroundColor('#C85C28')
+          .borderRadius(22)
+          .onClick(() => this.onConfirm())
+      }
+      .width('100%')
+    }
+    .width('86%')
+    .padding(12)
+    .backgroundColor('#F4F8F5')
+    .borderRadius(20)
+    .shadow({ radius: 22, color: '#33000000', offsetX: 0, offsetY: 10 })
+  }
+}
+
+@CustomDialog
+struct BookingConflictDialog {
+  controller?: CustomDialogController;
+  existingTitle: string = '';
+  existingTimeRange: string = '';
+  candidateTitle: string = '';
+  candidateTimeRange: string = '';
+  conflictNote: string = '';
+  onViewBookings: () => void = () => {};
+  onReplace: () => void = () => {};
+
+  build() {
+    Column({ space: 14 }) {
+      Row({ space: 11 }) {
+        Text('!')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#C85C28')
+          .width(38)
+          .height(38)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 7 })
+          .backgroundColor('#FFF0E7')
+          .borderRadius(19)
+        Column({ space: 3 }) {
+          Text('预约时间冲突')
+            .fontSize(19)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text('请先处理已有行程，再确认本次预约')
+            .fontSize(12)
+            .fontColor('#D9EFE1')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor('#176B43')
+      .borderRadius(16)
+
+      Column({ space: 5 }) {
+        Text('已有预约')
+          .fontSize(12)
+          .fontColor('#28764C')
+        Text(this.existingTitle)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#24362B')
+        Text(this.existingTimeRange)
+          .fontSize(12)
+          .fontColor('#587064')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding(14)
+      .backgroundColor('#E5F2E9')
+      .borderRadius(14)
+
+      Column({ space: 5 }) {
+        Text('本次选择')
+          .fontSize(12)
+          .fontColor('#B96A35')
+        Text(this.candidateTitle)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#24362B')
+        Text(this.candidateTimeRange)
+          .fontSize(12)
+          .fontColor('#9A592D')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding(14)
+      .backgroundColor('#FFF0E7')
+      .borderRadius(14)
+
+      Text(this.conflictNote)
+        .fontSize(12)
+        .lineHeight(18)
+        .fontColor('#6F7F75')
+        .width('100%')
+
+      Row({ space: 10 }) {
+        Button('查看已有预约')
+          .layoutWeight(1)
+          .height(44)
+          .fontSize(13)
+          .fontColor('#176B43')
+          .backgroundColor('#E5F2E9')
+          .borderRadius(22)
+          .onClick(() => this.onViewBookings())
+        Button('取消冲突项并继续')
+          .layoutWeight(1)
+          .height(44)
+          .fontSize(13)
+          .fontColor(Color.White)
+          .backgroundColor('#C85C28')
+          .borderRadius(22)
+          .onClick(() => this.onReplace())
+      }
+      .width('100%')
+    }
+    .width('86%')
+    .padding(12)
+    .backgroundColor('#F4F8F5')
+    .borderRadius(20)
+    .shadow({ radius: 22, color: '#33000000', offsetX: 0, offsetY: 10 })
+  }
+}
+
 @Entry
 @Component
 struct Index {
@@ -75,6 +298,7 @@ struct Index {
   @State private userRole: string = '游客';
   @State @Watch('onNoticeChanged') private notice: string = '欢迎使用山水智游，请登录账号。';
   @State private ticketIndex: number = 0;
+  @State private ticketCardRevision: number = 0;
   @State private selectedRouteId: string = 'family';
   @State private selectedSpotId: string = 'sudi';
   @State private homePhotoIndex: number = 0;
@@ -88,13 +312,11 @@ struct Index {
   @State private autoAvoidCongestion: boolean = true;
   @State private rerouteAdoptions: number = 0;
   @State private selectedMerchantCategory: string = '全部';
-  @State private merchantBookingIds: string[] = [];
+  @State private bookings: BookingRecord[] = [];
   @State private adminActiveTab: string = '概览';
   @State private mapExpanded: boolean = false;
   @State private navigationActive: boolean = false;
   @State private navigationStep: number = 0;
-  @State private ticketOrder: TicketOrder | undefined = undefined;
-  @State private projectBookings: ProjectBooking[] = [];
   @State private cartItems: CartItem[] = [];
   @State private mallCartOpen: boolean = false;
   @State private deliveryRecipient: string = '';
@@ -103,11 +325,14 @@ struct Index {
   @State private ticketInventoryDelta: number[] = [0, 0, 0];
   @State private ticketPausedIds: string[] = [];
   @State private projectInventoryDelta: number[] = [0, 0, 0, 0];
+  @State private projectFastPassInventoryDelta: number[] = [0, 0, 0, 0];
   @State private queueRefreshCount: number = 0;
   @State private projectQueueReleaseCounts: number[] = [0, 0, 0, 0];
   @State private facilityStatuses: string[] = ['关注中', '正常', '正常', '繁忙', '正常', '正常'];
   @State private remindedProjectIds: string[] = [];
   @State private feedbackHandled: boolean = false;
+  private cancelBookingDialogController: CustomDialogController | null = null;
+  private bookingConflictDialogController: CustomDialogController | null = null;
   @State private latestFeedback: string = '游客反馈：希望断桥高峰时增加分流提示。';
   @State private feedbackContent: string = '';
   @State private feedbackReplyDraft: string = '';
@@ -117,6 +342,10 @@ struct Index {
   @State private journeyPhotoUri: string = '';
   @State private journeyPhotoCaption: string = '';
   @State private aiAnswering: boolean = false;
+  @State private assistantTyping: boolean = false;
+  @State private assistantDraft: string = '';
+  @State private humanServiceRequested: boolean = false;
+  @State private lastServiceQuestion: string = '';
   @State private serviceDraft: string = '';
   @State private serviceMessages: ChatMessage[] = DEMO_CHAT_MESSAGES;
   @State private followUpRating: number = 0;
@@ -332,7 +561,16 @@ struct Index {
         this.activeTab = '首页';
         this.adminActiveTab = '概览';
         this.loggedIn = true;
+        return;
       }
+      AlertDialog.show({
+        title: '登录失败',
+        message: '账号或密码不正确，请检查后重新输入。',
+        primaryButton: {
+          value: '重新输入',
+          action: () => {}
+        }
+      });
     });
   }
 
@@ -481,6 +719,9 @@ struct Index {
             Text(ticket.description)
               .fontSize(12)
               .fontColor('#78857C')
+            Text(`${this.timeOf(ticket.startAt)} 入场 · 预计 ${this.timeOf(ticket.endAt)} 结束`)
+              .fontSize(12)
+              .fontColor('#6F7F75')
             Text(this.isTicketPaused(ticket.id) ? '当前已暂停售卖' : `剩余 ${this.ticketRemaining(ticket, index)} 张`)
               .fontSize(12)
               .fontColor(this.isTicketPaused(ticket.id) || this.ticketRemaining(ticket, index) < 50 ? '#C3621F' : '#26724B')
@@ -492,32 +733,38 @@ struct Index {
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor('#D85D27')
-            Button(index === this.ticketIndex ? '已选择' : '选择')
+            Button(this.hasActiveBooking('TICKET', ticket.id) ? '已选择' : '选择预订')
               .fontSize(12)
               .height(30)
-              .backgroundColor(index === this.ticketIndex ? '#176B43' : '#E5F2E9')
-              .fontColor(index === this.ticketIndex ? Color.White : '#176B43')
+              .backgroundColor(this.hasActiveBooking('TICKET', ticket.id) ? '#176B43' : '#E5F2E9')
+              .fontColor(this.hasActiveBooking('TICKET', ticket.id) ? Color.White : '#176B43')
               .borderRadius(15)
-              .onClick(() => {
-                this.ticketIndex = index;
-                this.notice = `已选择 ${ticket.name}`;
-              })
+              .onClick(() => this.selectAndBookTicket(index))
           }
         }
         .width('100%')
         .padding(16)
         .backgroundColor(Color.White)
         .borderRadius(16)
-      }, (ticket: TicketProduct) => ticket.id)
+        .onClick(() => this.cancelTicketFromCard(index))
+      }, (ticket: TicketProduct) => `${ticket.id}-${this.ticketCardRevision}`)
 
       if (this.tickets.length > 0) {
-        Button(`预订 ${this.tickets[this.ticketIndex].name} · ${this.viewModel.formatPrice(this.tickets[this.ticketIndex].price)}`)
-          .width('100%')
-          .height(48)
-          .backgroundColor('#176B43')
-          .fontColor(Color.White)
-          .borderRadius(24)
-          .onClick(() => this.bookTicket())
+        if (this.hasActiveBooking('TICKET', this.tickets[this.ticketIndex].id)) {
+          Button(`取消 ${this.tickets[this.ticketIndex].name}`)
+            .width('100%')
+            .height(48)
+            .backgroundColor('#FFF0E7')
+            .fontColor('#C85C28')
+            .borderRadius(24)
+            .onClick(() => this.toggleTicketBooking())
+        } else {
+          Text('点击票卡“选择预订”后将直接生成电子票。')
+            .fontSize(12)
+            .fontColor('#718077')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+        }
       } else {
         Text('票务数据未从后端返回')
           .fontSize(13)
@@ -694,17 +941,348 @@ struct Index {
     .onClick(() => this.activeTab = target)
   }
 
-  private bookTicket(): void {
+  private toggleTicketBooking(): void {
     const ticket = this.tickets[this.ticketIndex];
+    const existing = this.findActiveBooking('TICKET', ticket.id);
+    if (existing !== undefined) {
+      this.showCancelBookingDialog(existing);
+      return;
+    }
     if (!this.viewModel.canBook(ticket) || this.ticketRemaining(ticket, this.ticketIndex) <= 0 || this.isTicketPaused(ticket.id)) {
       this.notice = '该票种已售罄，请选择其他票种。';
       return;
     }
-    this.ticketOrder = this.viewModel.repository.createTicketOrder(ticket, '2026-09-03 09:00-10:00');
-    this.adjustTicketInventory(this.ticketIndex, -1);
-    this.notice = '支付成功，电子票二维码已生成。';
-    this.addHistory('票务', ticket.name, '已支付，电子票已生成');
-    this.activeTab = '我的';
+    this.requestBooking(this.createBooking('TICKET', ticket.id, ticket.name, ticket.startAt, ticket.endAt, false, false));
+  }
+
+  private selectAndBookTicket(index: number): void {
+    this.ticketIndex = index;
+    const ticket = this.tickets[index];
+    const existing = this.findActiveBooking('TICKET', ticket.id);
+    if (existing !== undefined) {
+      this.showCancelBookingDialog(existing);
+      return;
+    }
+    this.toggleTicketBooking();
+  }
+
+  private cancelTicketFromCard(index: number): void {
+    const ticket = this.tickets[index];
+    const existing = this.findActiveBooking('TICKET', ticket.id);
+    if (existing !== undefined) {
+      this.ticketIndex = index;
+      this.showCancelBookingDialog(existing);
+    }
+  }
+
+  private createBooking(
+    kind: string,
+    resourceId: string,
+    title: string,
+    startAt: string,
+    endAt: string,
+    fastPass: boolean,
+    reminderEnabled: boolean
+  ): BookingRecord {
+    const addons: BookingAddon[] = [];
+    if (fastPass) {
+      addons.push({ type: 'FAST_PASS', name: '快速通行券', price: this.projectFastPassPrice(resourceId), status: '已开通' });
+    }
+    return {
+      id: `B${Date.now()}`,
+      kind: kind,
+      resourceId: resourceId,
+      title: title,
+      startAt: startAt,
+      endAt: endAt,
+      status: '已确认',
+      cancellableUntil: kind === 'HOTEL' ? '入住日前 18:00' : '入场前可取消',
+      reminderEnabled: reminderEnabled,
+      addons: addons,
+      qrPayload: kind === 'TICKET' ? `SCENICNAV|${resourceId}|${startAt}|${Date.now()}` : ''
+    };
+  }
+
+  private requestBooking(candidate: BookingRecord): void {
+    if (!this.canReserveBooking(candidate)) {
+      return;
+    }
+    const conflicts = this.scheduleConflicts(candidate);
+    if (conflicts.length === 0) {
+      this.confirmBooking(candidate);
+      return;
+    }
+    const conflict = conflicts[0];
+    this.showBookingConflictDialog(candidate, conflict, conflicts.length);
+  }
+
+  private canReserveBooking(candidate: BookingRecord): boolean {
+    if (candidate.kind === 'TICKET') {
+      const index = this.ticketIndexById(candidate.resourceId);
+      if (index < 0 || this.ticketRemaining(this.tickets[index], index) <= 0 || this.isTicketPaused(candidate.resourceId)) {
+        this.notice = '该门票时段已无余量，请选择其他时段。';
+        return false;
+      }
+      return true;
+    }
+    if (candidate.kind === 'PROJECT') {
+      const index = this.projectIndex(candidate.resourceId);
+      const project = this.projects[index];
+      if (this.projectRemaining(project, index) <= 0) {
+        this.notice = `${candidate.title} 当前时段已约满，请选择其他时段。`;
+        return false;
+      }
+      if (this.bookingHasFastPass(candidate) && this.projectFastPassRemaining(project, index) <= 0) {
+        this.notice = `${candidate.title} 的快速通行名额已用完，可预约普通队列。`;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private confirmBooking(booking: BookingRecord): void {
+    if (booking.kind === 'TICKET') {
+      this.adjustTicketInventory(this.ticketIndexById(booking.resourceId), -1);
+    } else if (booking.kind === 'PROJECT') {
+      const projectIndex = this.projectIndex(booking.resourceId);
+      this.adjustProjectInventory(projectIndex, -1);
+      if (this.bookingHasFastPass(booking)) {
+        this.adjustProjectFastPassInventory(projectIndex, -1);
+      }
+    }
+    this.bookings = [...this.bookings, booking];
+    if (booking.kind === 'TICKET') {
+      this.ticketCardRevision = this.ticketCardRevision + 1;
+      this.notice = `${booking.title} 预订成功，电子票已生成。`;
+      this.addHistory('票务', booking.title, `${this.bookingTimeRange(booking)} · 电子票已生成`);
+    } else if (booking.kind === 'PROJECT') {
+      this.notice = `${booking.title} 预约成功${this.bookingHasFastPass(booking) ? '，快速通行已开通。' : '。'}`;
+      this.addHistory('预约', booking.title, `${this.bookingTimeRange(booking)} 时段已确认`);
+    } else {
+      this.notice = `${booking.title} 预订成功，已为你保留 ${this.bookingTimeRange(booking)}。`;
+      this.addHistory(booking.kind === 'HOTEL' ? '住宿' : '餐饮', booking.title, `${this.bookingTimeRange(booking)} 已确认`);
+    }
+  }
+
+  private replaceConflictingBookings(candidate: BookingRecord, conflicts: BookingRecord[]): void {
+    for (let index = 0; index < conflicts.length; index++) {
+      this.cancelBooking(conflicts[index], false);
+    }
+    this.confirmBooking(candidate);
+    this.notice = `已取消 ${conflicts.length} 项冲突预约，并确认 ${candidate.title}。`;
+  }
+
+  private showBookingConflictDialog(candidate: BookingRecord, conflict: BookingRecord, conflictCount: number): void {
+    if (this.bookingConflictDialogController !== null) {
+      return;
+    }
+    const conflictNote = conflictCount > 1
+      ? `本次选择还与另外 ${conflictCount - 1} 项已确认行程重叠。`
+      : '两个预约的时间重叠，不能同时确认。';
+    this.bookingConflictDialogController = new CustomDialogController({
+      builder: BookingConflictDialog({
+        existingTitle: conflict.title,
+        existingTimeRange: this.bookingTimeRange(conflict),
+        candidateTitle: candidate.title,
+        candidateTimeRange: this.bookingTimeRange(candidate),
+        conflictNote: conflictNote,
+        onViewBookings: () => {
+          this.closeBookingConflictDialog();
+          this.activeTab = '我的';
+        },
+        onReplace: () => {
+          this.closeBookingConflictDialog();
+          this.replaceConflictingBookings(candidate, this.scheduleConflicts(candidate));
+        }
+      }),
+      autoCancel: false,
+      alignment: DialogAlignment.Center,
+      customStyle: true,
+      maskColor: '#52000000'
+    });
+    this.bookingConflictDialogController.open();
+  }
+
+  private closeBookingConflictDialog(): void {
+    if (this.bookingConflictDialogController !== null) {
+      this.bookingConflictDialogController.close();
+      this.bookingConflictDialogController = null;
+    }
+  }
+
+  private showCancelBookingDialog(booking: BookingRecord): void {
+    if (this.cancelBookingDialogController !== null) {
+      return;
+    }
+    this.cancelBookingDialogController = new CustomDialogController({
+      builder: CancelBookingDialog({
+        bookingTitle: booking.title,
+        bookingType: this.bookingKindLabel(booking.kind),
+        bookingTimeRange: this.bookingTimeRange(booking),
+        cancellationRule: booking.cancellableUntil,
+        onKeep: () => {
+          this.closeCancelBookingDialog();
+          this.notice = '已保留当前预约。';
+        },
+        onConfirm: () => {
+          this.closeCancelBookingDialog();
+          this.cancelBooking(booking, true);
+        }
+      }),
+      autoCancel: false,
+      alignment: DialogAlignment.Center,
+      customStyle: true,
+      maskColor: '#52000000'
+    });
+    this.cancelBookingDialogController.open();
+  }
+
+  private closeCancelBookingDialog(): void {
+    if (this.cancelBookingDialogController !== null) {
+      this.cancelBookingDialogController.close();
+      this.cancelBookingDialogController = null;
+    }
+  }
+
+  private cancelBooking(booking: BookingRecord, showNotice: boolean): void {
+    if (booking.status !== '已确认') {
+      return;
+    }
+    const nextBookings: BookingRecord[] = [];
+    for (let index = 0; index < this.bookings.length; index++) {
+      const current = this.bookings[index];
+      if (current.id === booking.id) {
+        nextBookings.push({
+          id: current.id,
+          kind: current.kind,
+          resourceId: current.resourceId,
+          title: current.title,
+          startAt: current.startAt,
+          endAt: current.endAt,
+          status: '已取消',
+          cancellableUntil: current.cancellableUntil,
+          reminderEnabled: false,
+          addons: current.addons,
+          qrPayload: current.qrPayload
+        });
+      } else {
+        nextBookings.push(current);
+      }
+    }
+    this.bookings = nextBookings;
+    if (booking.kind === 'TICKET') {
+      this.adjustTicketInventory(this.ticketIndexById(booking.resourceId), 1);
+      this.ticketCardRevision = this.ticketCardRevision + 1;
+    } else if (booking.kind === 'PROJECT') {
+      const projectIndex = this.projectIndex(booking.resourceId);
+      this.adjustProjectInventory(projectIndex, 1);
+      if (this.bookingHasFastPass(booking)) {
+        this.adjustProjectFastPassInventory(projectIndex, 1);
+      }
+      this.removeProjectReminder(booking.resourceId);
+    }
+    this.addHistory('预约', booking.title, '预约已取消，时段库存已释放');
+    if (showNotice) {
+      this.notice = `${booking.title} 已取消，库存已释放。`;
+    }
+  }
+
+  private findActiveBooking(kind: string, resourceId: string): BookingRecord | undefined {
+    for (let index = 0; index < this.bookings.length; index++) {
+      const booking = this.bookings[index];
+      if (booking.kind === kind && booking.resourceId === resourceId && booking.status === '已确认') {
+        return booking;
+      }
+    }
+    return undefined;
+  }
+
+  private hasActiveBooking(kind: string, resourceId: string): boolean {
+    return this.findActiveBooking(kind, resourceId) !== undefined;
+  }
+
+  private activeBookings(kind: string): BookingRecord[] {
+    const result: BookingRecord[] = [];
+    for (let index = 0; index < this.bookings.length; index++) {
+      if (this.bookings[index].kind === kind && this.bookings[index].status === '已确认') {
+        result.push(this.bookings[index]);
+      }
+    }
+    return result;
+  }
+
+  private scheduledBookings(): BookingRecord[] {
+    const result: BookingRecord[] = [];
+    for (let index = 0; index < this.bookings.length; index++) {
+      const booking = this.bookings[index];
+      if (booking.kind !== 'TICKET' && booking.status === '已确认') {
+        result.push(booking);
+      }
+    }
+    return result;
+  }
+
+  private bookingKindLabel(kind: string): string {
+    if (kind === 'PROJECT') {
+      return '项目预约';
+    }
+    if (kind === 'HOTEL') {
+      return '酒店';
+    }
+    if (kind === 'RESTAURANT') {
+      return '餐饮';
+    }
+    return '门票';
+  }
+
+  private scheduleConflicts(candidate: BookingRecord): BookingRecord[] {
+    const result: BookingRecord[] = [];
+    for (let index = 0; index < this.bookings.length; index++) {
+      const booking = this.bookings[index];
+      if (booking.status === '已确认' && this.shouldCompareBookingTime(booking, candidate)
+        && booking.startAt < candidate.endAt && candidate.startAt < booking.endAt) {
+        result.push(booking);
+      }
+    }
+    return result;
+  }
+
+  private shouldCompareBookingTime(first: BookingRecord, second: BookingRecord): boolean {
+    const firstIsHotel = first.kind === 'HOTEL';
+    const secondIsHotel = second.kind === 'HOTEL';
+    const firstIsScenicActivity = first.kind === 'TICKET' || first.kind === 'PROJECT';
+    const secondIsScenicActivity = second.kind === 'TICKET' || second.kind === 'PROJECT';
+    return !(firstIsHotel && secondIsScenicActivity) && !(secondIsHotel && firstIsScenicActivity);
+  }
+
+  private bookingHasFastPass(booking: BookingRecord): boolean {
+    for (let index = 0; index < booking.addons.length; index++) {
+      if (booking.addons[index].type === 'FAST_PASS' && booking.addons[index].status === '已开通') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private ticketIndexById(ticketId: string): number {
+    for (let index = 0; index < this.tickets.length; index++) {
+      if (this.tickets[index].id === ticketId) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  private bookingTimeRange(booking: BookingRecord): string {
+    return `${this.displayDateTime(booking.startAt)} 至 ${this.displayDateTime(booking.endAt)}`;
+  }
+
+  private displayDateTime(value: string): string {
+    return value.length >= 16 ? `${value.substring(5, 10)} ${value.substring(11, 16)}` : value;
+  }
+
+  private timeOf(value: string): string {
+    return value.length >= 16 ? value.substring(11, 16) : value;
   }
 
   @Builder
@@ -801,15 +1379,27 @@ struct Index {
         .fontWeight(FontWeight.Medium)
         .fontColor('#264534')
       Row({ space: 8 }) {
-        ForEach(ITINERARY_DURATIONS, (duration: number) => {
-          Text(`${duration / 60} 小时`)
-            .fontSize(12)
-            .fontColor(this.itineraryDurationMinutes === duration ? Color.White : '#176B43')
-            .backgroundColor(this.itineraryDurationMinutes === duration ? '#176B43' : '#E5F2E9')
-            .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-            .borderRadius(16)
-            .onClick(() => this.itineraryDurationMinutes = duration)
-        }, (duration: number) => `${duration}`)
+        Text('2 小时')
+          .fontSize(12)
+          .fontColor(this.itineraryDurationMinutes === 120 ? Color.White : '#176B43')
+          .backgroundColor(this.itineraryDurationMinutes === 120 ? '#176B43' : '#E5F2E9')
+          .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+          .borderRadius(16)
+          .onClick(() => this.itineraryDurationMinutes = 120)
+        Text('4 小时')
+          .fontSize(12)
+          .fontColor(this.itineraryDurationMinutes === 240 ? Color.White : '#176B43')
+          .backgroundColor(this.itineraryDurationMinutes === 240 ? '#176B43' : '#E5F2E9')
+          .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+          .borderRadius(16)
+          .onClick(() => this.itineraryDurationMinutes = 240)
+        Text('6 小时')
+          .fontSize(12)
+          .fontColor(this.itineraryDurationMinutes === 360 ? Color.White : '#176B43')
+          .backgroundColor(this.itineraryDurationMinutes === 360 ? '#176B43' : '#E5F2E9')
+          .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+          .borderRadius(16)
+          .onClick(() => this.itineraryDurationMinutes = 360)
       }
       .width('100%')
 
@@ -839,7 +1429,7 @@ struct Index {
         .onClick(() => this.generatePersonalItinerary())
 
       if (this.activeItinerary !== undefined) {
-        this.itineraryPlanCard(this.activeItinerary)
+        this.itineraryPlanCard({ plan: this.activeItinerary })
       }
     }
     .width('100%')
@@ -860,32 +1450,32 @@ struct Index {
   }
 
   @Builder
-  itineraryPlanCard(plan: ItineraryPlan) {
+  itineraryPlanCard($$: ItineraryPlanCardParameter) {
     Column({ space: 9 }) {
       Row() {
         Column({ space: 3 }) {
-          Text(plan.title)
+          Text($$.plan.title)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor('#174D33')
-          Text(this.itinerarySpotNames(plan))
+          Text(this.itinerarySpotNames($$.plan))
             .fontSize(12)
             .lineHeight(18)
             .fontColor('#5D7164')
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        Text(`舒适度 ${plan.comfortScore}`)
+        Text(`舒适度 ${$$.plan.comfortScore}`)
           .fontSize(12)
           .fontColor('#176B43')
           .backgroundColor('#E5F2E9')
           .padding({ left: 8, right: 8, top: 5, bottom: 5 })
           .borderRadius(12)
       }
-      Text(`预计 ${plan.durationMinutes} 分钟 · 已避拥节省约 ${plan.savedWaitMinutes} 分钟`)
+      Text(`预计 ${$$.plan.durationMinutes} 分钟 · 已避拥节省约 ${$$.plan.savedWaitMinutes} 分钟`)
         .fontSize(12)
         .fontColor('#5D7164')
-      Text(plan.explanation)
+      Text($$.plan.explanation)
         .fontSize(12)
         .lineHeight(19)
         .fontColor('#B05B28')
@@ -1503,7 +2093,10 @@ struct Index {
               Text(`${project.category} · ${project.venue}`)
                 .fontSize(12)
                 .fontColor('#6F7F75')
-              Text(`${project.startTime} 入场 · 前方约 ${this.projectQueueSize(project)} 人 · 预计等待 ${this.projectWaitMinutes(project)} 分钟`)
+              Text(`${project.startTime} 入场 · 预计 ${project.endTime} 结束 · 前方约 ${this.projectQueueSize(project)} 人`)
+                .fontSize(12)
+                .fontColor('#6F7F75')
+              Text(`节目约 ${this.durationMinutes(project.startAt, project.endAt)} 分钟 · 预计等待 ${this.projectWaitMinutes(project)} 分钟`)
                 .fontSize(12)
                 .fontColor('#6F7F75')
             }
@@ -1514,24 +2107,26 @@ struct Index {
               .fontColor(this.projectRemaining(project, index) < 10 ? '#C3621F' : '#28764C')
           }
           Row({ space: 10 }) {
-            Button(this.hasProjectBooking(project.id) ? '已预约' : '预约时段')
+            Button(this.hasProjectBooking(project.id) ? '取消预约' : '预约时段')
               .layoutWeight(1)
               .height(38)
               .fontSize(13)
               .backgroundColor(this.hasProjectBooking(project.id) ? '#E2F2E8' : '#176B43')
               .fontColor(this.hasProjectBooking(project.id) ? '#176B43' : Color.White)
               .borderRadius(19)
-              .onClick(() => this.bookProject(project))
-            Button(this.hasFastPass(project.id) ? '快速通行券已购' : `快速通行券 ￥${project.fastPassPrice}`)
+              .onClick(() => this.toggleProjectBooking(project))
+            Button(this.hasFastPass(project.id) ? '取消快速通行' : (this.hasProjectBooking(project.id) ? `升级快速通行 ￥${project.fastPassPrice}` : `预约并开通 ￥${project.fastPassPrice}`))
               .layoutWeight(1)
               .height(38)
               .fontSize(13)
               .backgroundColor('#FFF0E7')
               .fontColor('#C85C28')
               .borderRadius(19)
-              .onClick(() => this.buyFastPass(project))
+              .onClick(() => this.toggleProjectFastPass(project))
           }
-          Text(this.hasProjectBooking(project.id) ? `已设置：入场前 ${project.reminderMinutes} 分钟应用内提醒${this.hasFastPass(project.id) ? ' · 已启用快速核验通道' : ''}` : '可预约普通队列，或购买快速通行券（插队券）缩短等待。')
+          Text(this.hasProjectBooking(project.id)
+            ? `已确认 ${project.startTime}–${project.endTime}${this.hasFastPass(project.id) ? ' · 已启用快速核验通道' : ` · 入场前 ${project.reminderMinutes} 分钟提醒`}`
+            : `快速通行余 ${this.projectFastPassRemaining(project, index)}/${project.fastPassCapacity}，与预约时段绑定。`)
             .fontSize(12)
             .fontColor(this.hasProjectBooking(project.id) ? '#28764C' : '#8A715D')
         }
@@ -1593,6 +2188,11 @@ struct Index {
           .fontSize(12)
           .lineHeight(18)
           .fontColor('#6F7F75')
+        Text(merchant.category === '住宿'
+          ? `本次入住：${this.displayDateTime(merchant.bookingStartAt)} 至 ${this.displayDateTime(merchant.bookingEndAt)}`
+          : `本次到店：${this.displayDateTime(merchant.bookingStartAt)}–${this.timeOf(merchant.bookingEndAt)}`)
+          .fontSize(12)
+          .fontColor('#6F7F75')
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
@@ -1625,14 +2225,14 @@ struct Index {
       .alignItems(HorizontalAlign.Start)
 
       Row({ space: 10 }) {
-        Button(this.hasMerchantBooking(merchant.id) ? '已预订' : (merchant.category === '住宿' ? '预订客房' : '预订餐位'))
+        Button(this.hasMerchantBooking(merchant.id) ? '取消预订' : (merchant.category === '住宿' ? '预订客房' : '预订餐位'))
           .layoutWeight(1)
           .height(36)
           .fontSize(12)
           .backgroundColor(this.hasMerchantBooking(merchant.id) ? '#E2F2E8' : '#176B43')
           .fontColor(this.hasMerchantBooking(merchant.id) ? '#176B43' : Color.White)
           .borderRadius(18)
-          .onClick(() => this.bookMerchant(merchant))
+          .onClick(() => this.toggleMerchantBooking(merchant))
         Button('查看评价')
           .layoutWeight(1)
           .height(36)
@@ -1652,81 +2252,118 @@ struct Index {
   }
 
   private hasMerchantBooking(merchantId: string): boolean {
-    return this.merchantBookingIds.indexOf(merchantId) >= 0;
+    return this.hasActiveBooking(this.merchantBookingKind(merchantId), merchantId);
   }
 
-  private bookMerchant(merchant: MerchantItem): void {
-    if (this.hasMerchantBooking(merchant.id)) {
-      this.notice = `${merchant.name} 已预订，可按预订信息到店使用。`;
-      return;
-    }
-    this.merchantBookingIds = [...this.merchantBookingIds, merchant.id];
-    const bookingType = merchant.category === '住宿' ? '客房' : '餐位';
-    this.notice = `${merchant.name} ${bookingType}预订成功，到店报手机号即可核验。`;
-    this.addHistory(merchant.category, merchant.name, `${bookingType}预订成功 · ${merchant.offerTitle}`);
-  }
-
-  private bookProject(project: ProjectReservation): void {
-    if (this.hasProjectBooking(project.id)) {
-      this.notice = `${project.name} 已预约，请在 ${project.startTime} 前到场。`;
-      return;
-    }
-    const index = this.projectIndex(project.id);
-    if (this.projectRemaining(project, index) <= 0) {
-      this.notice = `${project.name} 当前时段已约满，请刷新或选择其他项目。`;
-      return;
-    }
-    const booking: ProjectBooking = {
-      projectId: project.id,
-      fastPass: false,
-      reminderEnabled: true,
-      status: '已预约'
-    };
-    this.projectBookings = [...this.projectBookings, booking];
-    this.adjustProjectInventory(index, -1);
-    this.notice = `${project.name} 预约成功，预计等待 ${this.projectWaitMinutes(project)} 分钟，入场前 ${project.reminderMinutes} 分钟将提醒。`;
-    this.addHistory('预约', project.name, `${project.startTime} 时段预约成功`);
-  }
-
-  private buyFastPass(project: ProjectReservation): void {
-    if (this.hasFastPass(project.id)) {
-      this.notice = `${project.name} 的快速通行服务已生效，请走快速核验通道。`;
-      return;
-    }
-    const index = this.projectIndex(project.id);
-    if (this.projectRemaining(project, index) <= 0 && !this.hasProjectBooking(project.id)) {
-      this.notice = `${project.name} 当前无可用时段，暂无法购买快速通行服务。`;
-      return;
-    }
-    if (this.hasProjectBooking(project.id)) {
-      const nextBookings: ProjectBooking[] = [];
-      for (let bookingIndex = 0; bookingIndex < this.projectBookings.length; bookingIndex++) {
-        const current = this.projectBookings[bookingIndex];
-        if (current.projectId === project.id) {
-          const upgraded: ProjectBooking = {
-            projectId: current.projectId,
-            fastPass: true,
-            reminderEnabled: current.reminderEnabled,
-            status: '快速通行已开通'
-          };
-          nextBookings.push(upgraded);
-        } else {
-          nextBookings.push(current);
-        }
+  private merchantBookingKind(merchantId: string): string {
+    for (let index = 0; index < this.merchants.length; index++) {
+      if (this.merchants[index].id === merchantId) {
+        return this.merchants[index].category === '住宿' ? 'HOTEL' : 'RESTAURANT';
       }
-      this.projectBookings = nextBookings;
-    } else {
-      const booking: ProjectBooking = {
-        projectId: project.id,
-        fastPass: true,
-        reminderEnabled: true,
-        status: '快速通行已开通'
-      };
-      this.projectBookings = [...this.projectBookings, booking];
-      this.adjustProjectInventory(index, -1);
     }
-    this.notice = `${project.name} 快速通行支付成功，已保留时段并缩短现场等待。`;
-    this.addHistory('预约', project.name, `已购买 ￥${project.fastPassPrice} 快速通行服务`);
+    return 'RESTAURANT';
+  }
+
+  private toggleMerchantBooking(merchant: MerchantItem): void {
+    const kind = merchant.category === '住宿' ? 'HOTEL' : 'RESTAURANT';
+    const existing = this.findActiveBooking(kind, merchant.id);
+    if (existing !== undefined) {
+      this.showCancelBookingDialog(existing);
+      return;
+    }
+    this.requestBooking(this.createBooking(kind, merchant.id, merchant.name, merchant.bookingStartAt, merchant.bookingEndAt, false, false));
+  }
+
+  private toggleProjectBooking(project: ProjectReservation): void {
+    const existing = this.findActiveBooking('PROJECT', project.id);
+    if (existing !== undefined) {
+      this.showCancelBookingDialog(existing);
+      return;
+    }
+    this.requestBooking(this.createBooking('PROJECT', project.id, project.name, project.startAt, project.endAt, false, true));
+  }
+
+  private toggleProjectFastPass(project: ProjectReservation): void {
+    const existing = this.findActiveBooking('PROJECT', project.id);
+    if (existing === undefined) {
+      this.requestBooking(this.createBooking('PROJECT', project.id, project.name, project.startAt, project.endAt, true, true));
+      return;
+    }
+    if (this.bookingHasFastPass(existing)) {
+      this.showDowngradeFastPassDialog(existing);
+      return;
+    }
+    const index = this.projectIndex(project.id);
+    if (this.projectFastPassRemaining(project, index) <= 0) {
+      this.notice = `${project.name} 的快速通行名额已用完。`;
+      return;
+    }
+    AlertDialog.show({
+      title: '升级快速通行',
+      message: `为“${project.name}”开通快速通行券（￥${project.fastPassPrice}），原预约时段 ${project.startTime}–${project.endTime} 保持不变。`,
+      primaryButton: { value: '暂不升级', action: () => this.notice = '已保留普通预约。' },
+      secondaryButton: { value: '确认升级', action: () => this.upgradeFastPass(existing, project) }
+    });
+  }
+
+  private upgradeFastPass(booking: BookingRecord, project: ProjectReservation): void {
+    const addons: BookingAddon[] = [];
+    for (let addonIndex = 0; addonIndex < booking.addons.length; addonIndex++) {
+      addons.push(booking.addons[addonIndex]);
+    }
+    addons.push({ type: 'FAST_PASS', name: '快速通行券', price: project.fastPassPrice, status: '已开通' });
+    this.replaceBookingAddons(booking, addons);
+    this.adjustProjectFastPassInventory(this.projectIndex(project.id), -1);
+    this.notice = `${project.name} 已升级快速通行，预约时段保持 ${project.startTime}–${project.endTime}。`;
+    this.addHistory('预约', project.name, `已升级 ￥${project.fastPassPrice} 快速通行服务`);
+  }
+
+  private showDowngradeFastPassDialog(booking: BookingRecord): void {
+    AlertDialog.show({
+      title: '取消快速通行',
+      message: `将取消“${booking.title}”的快速通行权益，保留原预约 ${this.bookingTimeRange(booking)}。`,
+      primaryButton: { value: '保留权益', action: () => this.notice = '快速通行权益仍然有效。' },
+      secondaryButton: { value: '确认取消', action: () => this.downgradeFastPass(booking) }
+    });
+  }
+
+  private downgradeFastPass(booking: BookingRecord): void {
+    const addons: BookingAddon[] = [];
+    for (let addonIndex = 0; addonIndex < booking.addons.length; addonIndex++) {
+      const addon = booking.addons[addonIndex];
+      if (addon.type !== 'FAST_PASS') {
+        addons.push(addon);
+      }
+    }
+    this.replaceBookingAddons(booking, addons);
+    this.adjustProjectFastPassInventory(this.projectIndex(booking.resourceId), 1);
+    this.notice = `${booking.title} 的快速通行已取消，普通预约仍然有效。`;
+    this.addHistory('预约', booking.title, '快速通行已取消，保留普通预约');
+  }
+
+  private replaceBookingAddons(booking: BookingRecord, addons: BookingAddon[]): void {
+    const nextBookings: BookingRecord[] = [];
+    for (let index = 0; index < this.bookings.length; index++) {
+      const current = this.bookings[index];
+      if (current.id === booking.id) {
+        nextBookings.push({
+          id: current.id,
+          kind: current.kind,
+          resourceId: current.resourceId,
+          title: current.title,
+          startAt: current.startAt,
+          endAt: current.endAt,
+          status: current.status,
+          cancellableUntil: current.cancellableUntil,
+          reminderEnabled: current.reminderEnabled,
+          addons: addons,
+          qrPayload: current.qrPayload
+        });
+      } else {
+        nextBookings.push(current);
+      }
+    }
+    this.bookings = nextBookings;
   }
 
   private ticketRemaining(ticket: TicketProduct, index: number): number {
@@ -1758,6 +2395,22 @@ struct Index {
     return project.remaining + this.projectInventoryDelta[index];
   }
 
+  private projectFastPassRemaining(project: ProjectReservation, index: number): number {
+    return project.fastPassRemaining + this.projectFastPassInventoryDelta[index];
+  }
+
+  private projectFastPassPrice(projectId: string): number {
+    return this.projects[this.projectIndex(projectId)].fastPassPrice;
+  }
+
+  private durationMinutes(startAt: string, endAt: string): number {
+    const startHour = Number(startAt.substring(11, 13));
+    const startMinute = Number(startAt.substring(14, 16));
+    const endHour = Number(endAt.substring(11, 13));
+    const endMinute = Number(endAt.substring(14, 16));
+    return (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+  }
+
   private projectWaitMinutes(project: ProjectReservation): number {
     const refreshedMinutes = (this.queueRefreshCount % 4) * 3;
     const releasedMinutes = this.projectQueueReleaseCount(project) * 3;
@@ -1780,21 +2433,12 @@ struct Index {
   }
 
   private hasProjectBooking(projectId: string): boolean {
-    for (let index = 0; index < this.projectBookings.length; index++) {
-      if (this.projectBookings[index].projectId === projectId) {
-        return true;
-      }
-    }
-    return false;
+    return this.hasActiveBooking('PROJECT', projectId);
   }
 
   private hasFastPass(projectId: string): boolean {
-    for (let index = 0; index < this.projectBookings.length; index++) {
-      if (this.projectBookings[index].projectId === projectId && this.projectBookings[index].fastPass) {
-        return true;
-      }
-    }
-    return false;
+    const booking = this.findActiveBooking('PROJECT', projectId);
+    return booking !== undefined && this.bookingHasFastPass(booking);
   }
 
   private adjustProjectInventory(index: number, amount: number): void {
@@ -1805,20 +2449,38 @@ struct Index {
     this.projectInventoryDelta = nextInventory;
   }
 
+  private adjustProjectFastPassInventory(index: number, amount: number): void {
+    const nextInventory: number[] = [];
+    for (let inventoryIndex = 0; inventoryIndex < this.projectFastPassInventoryDelta.length; inventoryIndex++) {
+      nextInventory.push(inventoryIndex === index ? this.projectFastPassInventoryDelta[inventoryIndex] + amount : this.projectFastPassInventoryDelta[inventoryIndex]);
+    }
+    this.projectFastPassInventoryDelta = nextInventory;
+  }
+
   private refreshQueues(): void {
     this.queueRefreshCount = this.queueRefreshCount + 1;
     this.notice = `已刷新 ${this.simulatedClock()} 的排队数据，部分项目已完成放行。`;
     this.addHistory('预约', '排队数据刷新', '查看各项目最新等待时间');
   }
 
-  private triggerProjectReminder(booking: ProjectBooking): void {
-    if (this.remindedProjectIds.indexOf(booking.projectId) >= 0) {
-      this.notice = `${this.projectName(booking.projectId)} 的到场提醒已发送。`;
+  private triggerProjectReminder(booking: BookingRecord): void {
+    if (this.remindedProjectIds.indexOf(booking.resourceId) >= 0) {
+      this.notice = `${booking.title} 的到场提醒已发送。`;
       return;
     }
-    this.remindedProjectIds = [...this.remindedProjectIds, booking.projectId];
-    this.notice = `到场提醒：请在 ${this.projectName(booking.projectId)} 开始前前往集合点${booking.fastPass ? '，快速核验通道已开启。' : '。'}`;
-    this.addHistory('提醒', this.projectName(booking.projectId), '已发送应用内到场提醒');
+    this.remindedProjectIds = [...this.remindedProjectIds, booking.resourceId];
+    this.notice = `到场提醒：请在 ${booking.title} 开始前前往集合点${this.bookingHasFastPass(booking) ? '，快速核验通道已开启。' : '。'}`;
+    this.addHistory('提醒', booking.title, '已发送应用内到场提醒');
+  }
+
+  private removeProjectReminder(projectId: string): void {
+    const nextIds: string[] = [];
+    for (let index = 0; index < this.remindedProjectIds.length; index++) {
+      if (this.remindedProjectIds[index] !== projectId) {
+        nextIds.push(this.remindedProjectIds[index]);
+      }
+    }
+    this.remindedProjectIds = nextIds;
   }
 
   @Builder
@@ -2330,14 +2992,15 @@ struct Index {
       .backgroundColor(Color.White)
       .borderRadius(16)
 
-      if (this.ticketOrder) {
+      if (this.activeBookings('TICKET').length > 0) {
+        this.sectionHeading('我的电子票', `${this.activeBookings('TICKET').length} 张待使用`)
+        ForEach(this.activeBookings('TICKET'), (booking: BookingRecord) => {
         Column({ space: 10 }) {
-          this.sectionHeading('我的电子票', this.ticketOrder.status)
-          Text(this.ticketOrder.ticketName)
+          Text(booking.title)
             .fontSize(17)
             .fontWeight(FontWeight.Medium)
             .fontColor('#24362B')
-          Text(this.ticketOrder.visitDate)
+          Text(`${this.bookingTimeRange(booking)} · ${booking.status}`)
             .fontSize(13)
             .fontColor('#6F7F75')
           Text('▣ ▦ ▣ ▤ ▦ ▣\n▦ ▣ ▤ ▣ ▦ ▤\n▣ ▤ ▦ ▣ ▤ ▦')
@@ -2347,23 +3010,18 @@ struct Index {
             .padding(12)
             .backgroundColor('#F2F5F3')
             .borderRadius(8)
-          Text('验票码：' + this.ticketOrder.qrPayload)
+          Text('验票码：' + booking.qrPayload)
             .fontSize(9)
             .fontColor('#7B887F')
             .maxLines(1)
           Row({ space: 10 }) {
-            Button('退改电子票')
+            Button('取消电子票')
               .layoutWeight(1)
               .height(36)
               .backgroundColor('#FFF0E7')
               .fontColor('#C85C28')
               .borderRadius(18)
-              .onClick(() => {
-                this.ticketOrder = undefined;
-                this.adjustTicketInventory(this.ticketIndex, 1);
-                this.notice = '电子票已退改，库存已释放。';
-                this.addHistory('票务', '电子票退改', '库存已释放，等待退款处理');
-              })
+              .onClick(() => this.showCancelBookingDialog(booking))
             Button('闸机验票')
               .layoutWeight(1)
               .height(36)
@@ -2377,6 +3035,8 @@ struct Index {
         .padding(17)
         .backgroundColor(Color.White)
         .borderRadius(17)
+        .margin({ top: 7 })
+        }, (booking: BookingRecord) => booking.id)
       } else {
         Text('还没有电子票，去首页开启一段山水之旅。')
           .fontSize(14)
@@ -2387,9 +3047,9 @@ struct Index {
           .borderRadius(15)
       }
 
-      this.sectionHeading('预约提醒', `${this.projectBookings.length} 项待体验`)
-      if (this.projectBookings.length === 0) {
-        Text('暂无预约项目。')
+      this.sectionHeading('我的预约', `${this.scheduledBookings().length} 项待使用`)
+      if (this.scheduledBookings().length === 0) {
+        Text('暂无酒店、餐饮或项目预约。')
           .fontSize(13)
           .fontColor('#738078')
           .width('100%')
@@ -2397,21 +3057,54 @@ struct Index {
           .backgroundColor(Color.White)
           .borderRadius(15)
       } else {
-        ForEach(this.projectBookings, (booking: ProjectBooking) => {
+        ForEach(this.scheduledBookings(), (booking: BookingRecord) => {
           Column({ space: 7 }) {
-            Text(`已预约：${this.projectName(booking.projectId)} · ${booking.fastPass ? '快速通行' : '普通队列'}`)
+            Text(`${this.bookingKindLabel(booking.kind)}：${booking.title}${this.bookingHasFastPass(booking) ? ' · 快速通行' : ''}`)
               .fontSize(13)
               .fontColor('#286C49')
-            Text(`状态：${booking.status} · 已设置到场提醒${this.remindedProjectIds.indexOf(booking.projectId) >= 0 ? '（已发送）' : ''}`)
+            Text(`${this.bookingTimeRange(booking)} · ${booking.status}`)
               .fontSize(12)
               .fontColor('#657A6B')
-            Button(this.remindedProjectIds.indexOf(booking.projectId) >= 0 ? '到场提醒已发送' : '发送到场提醒')
-              .height(32)
-              .fontSize(12)
-              .backgroundColor('#F1F7F3')
-              .fontColor('#176B43')
-              .borderRadius(16)
-              .onClick(() => this.triggerProjectReminder(booking))
+            if (booking.kind === 'PROJECT') {
+              Text(this.remindedProjectIds.indexOf(booking.resourceId) >= 0 ? '到场提醒已发送' : '可发送到场提醒')
+                .fontSize(12)
+                .fontColor('#657A6B')
+            } else {
+              Text(`${booking.cancellableUntil} · 取消后释放库存`)
+                .fontSize(12)
+                .fontColor('#657A6B')
+            }
+            Row({ space: 8 }) {
+              if (booking.kind === 'PROJECT') {
+                Button(this.remindedProjectIds.indexOf(booking.resourceId) >= 0 ? '提醒已发送' : '发送提醒')
+                  .layoutWeight(1)
+                  .height(32)
+                  .fontSize(12)
+                  .backgroundColor('#F1F7F3')
+                  .fontColor('#176B43')
+                  .borderRadius(16)
+                  .onClick(() => this.triggerProjectReminder(booking))
+                if (this.bookingHasFastPass(booking)) {
+                  Button('取消快速通行')
+                    .layoutWeight(1)
+                    .height(32)
+                    .fontSize(12)
+                    .backgroundColor('#FFF4E6')
+                    .fontColor('#B66A28')
+                    .borderRadius(16)
+                    .onClick(() => this.showDowngradeFastPassDialog(booking))
+                }
+              }
+              Button('取消预约')
+                .layoutWeight(1)
+                .height(32)
+                .fontSize(12)
+                .backgroundColor('#FFF0E7')
+                .fontColor('#C85C28')
+                .borderRadius(16)
+                .onClick(() => this.showCancelBookingDialog(booking))
+            }
+            .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')
@@ -2419,7 +3112,7 @@ struct Index {
           .backgroundColor('#E9F7EE')
           .borderRadius(14)
           .margin({ top: 7 })
-        }, (booking: ProjectBooking) => booking.projectId)
+        }, (booking: BookingRecord) => booking.id)
       }
 
       this.profileHistorySummary()
@@ -2684,10 +3377,10 @@ struct Index {
           .fontColor('#176B43')
           .onClick(() => this.activeTab = '我的')
         Blank()
-        Text(this.aiAnswering ? '回复中' : '在线')
+        Text(this.humanServiceRequested ? '已转人工' : (this.aiAnswering ? '回复中' : '在线'))
           .fontSize(12)
-          .fontColor(this.aiAnswering ? '#9B6422' : '#176B43')
-          .backgroundColor(this.aiAnswering ? '#FFF2D9' : '#E5F2E9')
+          .fontColor(this.humanServiceRequested ? '#3F5A91' : (this.aiAnswering ? '#9B6422' : '#176B43'))
+          .backgroundColor(this.humanServiceRequested ? '#E8EDF8' : (this.aiAnswering ? '#FFF2D9' : '#E5F2E9'))
           .padding({ left: 9, right: 9, top: 5, bottom: 5 })
           .borderRadius(12)
       }
@@ -2722,6 +3415,36 @@ struct Index {
           .alignItems(message.sender === '游客' ? HorizontalAlign.End : HorizontalAlign.Start)
           .width('100%')
         }, (message: ChatMessage) => message.id)
+        if (this.assistantTyping) {
+          Column({ space: 3 }) {
+            Text('小湖助手 · 刚刚')
+              .fontSize(11)
+              .fontColor('#78857C')
+            Text('正在输入…')
+              .fontSize(14)
+              .fontColor('#2A3A31')
+              .backgroundColor('#FFFFFF')
+              .padding(12)
+              .borderRadius(13)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+        } else if (this.assistantDraft.length > 0) {
+          Column({ space: 3 }) {
+            Text('小湖助手 · 刚刚')
+              .fontSize(11)
+              .fontColor('#78857C')
+            Text(this.assistantDraft)
+              .fontSize(14)
+              .lineHeight(20)
+              .fontColor('#2A3A31')
+              .backgroundColor('#FFFFFF')
+              .padding(12)
+              .borderRadius(13)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+        }
       }
       .width('100%')
       .padding(14)
@@ -2735,6 +3458,15 @@ struct Index {
           .height(44)
           .backgroundColor(Color.White)
           .borderRadius(12)
+        Text(this.humanServiceRequested ? '已转人工' : '转人工')
+          .fontSize(13)
+          .fontColor(this.humanServiceRequested ? '#8B98AD' : '#3F5A91')
+          .backgroundColor('#E8EDF8')
+          .padding({ left: 10, right: 10 })
+          .textAlign(TextAlign.Center)
+          .height(44)
+          .borderRadius(12)
+          .onClick(() => this.requestHumanService())
         Button('发送')
           .height(44)
           .backgroundColor(this.aiAnswering ? '#8BA99A' : '#176B43')
@@ -2826,7 +3558,7 @@ struct Index {
     this.notice = '已切换至管理端登录，请点击“进入景区”。';
   }
 
-  private sendServiceMessage(content: string): void {
+  private async sendServiceMessage(content: string): Promise<void> {
     const question = content.trim();
     if (question.length === 0) {
       this.notice = '请输入需要咨询的问题。';
@@ -2844,18 +3576,43 @@ struct Index {
     };
     this.serviceMessages = [...this.serviceMessages, visitorMessage];
     this.serviceDraft = '';
+    this.lastServiceQuestion = question;
     this.aiAnswering = true;
+    this.assistantTyping = true;
     this.notice = '小湖助手正在为你整理答案。';
     this.addHistory('咨询', '小湖助手', question);
-    this.callLargeModel(question).then((answer: string) => {
-      this.appendAiAnswer(answer);
-    }).catch(() => {
-      this.appendAiAnswer(this.serviceReply(question));
-      this.notice = '咨询服务繁忙，已先为你提供基础建议。';
-    });
+    await this.delay(this.thinkDelayMillis());
+    let answer: string = '';
+    let usedFallback: boolean = false;
+    try {
+      answer = await this.callLargeModel(question);
+    } catch (error) {
+      answer = this.serviceReply(question);
+      usedFallback = true;
+    }
+    this.assistantTyping = false;
+    await this.typewriteAnswer(answer);
+    this.aiAnswering = false;
+    this.notice = usedFallback ? '咨询服务繁忙，已先为你提供基础建议。' : '小湖助手已回复你的问题。';
   }
 
-  private appendAiAnswer(answer: string): void {
+  private thinkDelayMillis(): number {
+    return 800 + Math.floor(Math.random() * 700);
+  }
+
+  private async typewriteAnswer(answer: string): Promise<void> {
+    this.assistantTyping = false;
+    this.assistantDraft = '';
+    if (answer.length === 0) {
+      return;
+    }
+    let written: number = Math.min(answer.length, 2);
+    this.assistantDraft = answer.substring(0, written);
+    while (written < answer.length) {
+      await this.delay(26);
+      written = Math.min(answer.length, written + 2);
+      this.assistantDraft = answer.substring(0, written);
+    }
     const agentMessage: ChatMessage = {
       id: `agent-${Date.now()}`,
       sender: '小湖助手',
@@ -2863,8 +3620,39 @@ struct Index {
       time: '刚刚'
     };
     this.serviceMessages = [...this.serviceMessages, agentMessage];
-    this.aiAnswering = false;
-    this.notice = '小湖助手已回复你的问题。';
+    this.assistantDraft = '';
+  }
+
+  private requestHumanService(): void {
+    if (this.humanServiceRequested) {
+      this.notice = '已转人工客服，请耐心等待回复。';
+      return;
+    }
+    if (this.aiAnswering) {
+      this.notice = '请稍候，小湖助手回复完成后再申请转人工。';
+      return;
+    }
+    const topic: string = this.lastServiceQuestion.length > 0 ? this.lastServiceQuestion : '游客需要人工协助';
+    const systemMessage: ChatMessage = {
+      id: `system-${Date.now()}`,
+      sender: '系统',
+      content: '已收到您的转人工请求，人工客服正在接入，请稍候。您仍可继续咨询景区问题。',
+      time: '刚刚'
+    };
+    this.humanServiceRequested = true;
+    this.serviceMessages = [...this.serviceMessages, systemMessage];
+    this.latestFeedback = `游客人工客服请求：${topic}`;
+    this.feedbackHandled = false;
+    this.addHistory('客服', '转人工客服', topic);
+    this.notice = '已为您转接人工客服，管理端将收到您的请求。';
+  }
+
+  private delay(millis: number): Promise<void> {
+    return new Promise<void>((resolve: () => void) => {
+      setTimeout(() => {
+        resolve();
+      }, millis);
+    });
   }
 
   private async callLargeModel(question: string): Promise<string> {

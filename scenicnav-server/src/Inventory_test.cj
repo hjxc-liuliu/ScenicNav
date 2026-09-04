@@ -26,6 +26,16 @@ class InventoryTests {
     }
 
     @TestCase
+    func scheduleBlocksOverlapsAndAllowsCancellation(): Unit {
+        let schedule = BookingSchedule()
+        @Assert(schedule.reserve("hotel-1", 840, 2160), true)
+        @Assert(schedule.reserve("hotel-2", 900, 2100), false)
+        @Assert(schedule.reserve("ticket-at-checkout", 2160, 2220), true)
+        @Assert(schedule.cancel("hotel-1"), true)
+        @Assert(schedule.reserve("hotel-2", 900, 2100), true)
+    }
+
+    @TestCase
     func priceUsesFenToAvoidFloatRounding(): Unit {
         @Assert(TicketPricing.total(12800, 2), 25600)
         @Assert(TicketPricing.total(-1, 2), 0)

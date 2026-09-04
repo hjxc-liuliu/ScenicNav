@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ScenicNav REST API
-  version: 1.0.0-mvp
+  version: 1.1.0-mvp
   description: 智慧景区旅游服务系统的端后契约。金额均以分（fen）传输。
 servers:
   - url: http://127.0.0.1:8080/api/v1
@@ -30,6 +30,77 @@ paths:
         - $ref: '#/components/parameters/OrderId'
       responses:
         '200': { $ref: '#/components/responses/Success' }
+  /bookings/me:
+    get:
+      summary: 查询当前游客所有有效及已取消预约
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /bookings/precheck:
+    post:
+      summary: 在支付前校验候选时段是否与当前行程冲突
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /bookings:
+    post:
+      summary: 创建门票、项目、酒店或餐饮预约，并原子扣减库存
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/ScheduleConflict' }
+  /bookings/{bookingId}/cancel:
+    post:
+      summary: 取消预约及其附加权益，并在同一事务内释放库存
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/BookingNotCancellable' }
+  /bookings/{bookingId}/addons/fast-pass:
+    post:
+      summary: 将普通项目预约升级为快速通行；不重复占用项目总容量
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/ScheduleConflict' }
+    delete:
+      summary: 取消快速通行权益并保留原项目预约
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /bookings/replace:
+    post:
+      summary: 原子取消冲突预约并创建新预约；新库存不足时保留原预约
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cancelBookingIds, candidate]
+              properties:
+                cancelBookingIds: { type: array, items: { type: string } }
+                candidate: { $ref: '#/components/schemas/BookingRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/ScheduleConflict' }
   /guide/spots:
     get:
       summary: 查询景点、讲解和实时人流
@@ -100,9 +171,26 @@ components:
       in: path
       required: true
       schema: { type: string }
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema: { type: string }
   responses:
     Success:
       description: 统一成功响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+    ScheduleConflict:
+      description: 候选时段与用户已有有效预约重叠
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScheduleConflictResponse'
+    BookingNotCancellable:
+      description: 预约已核销、已过取消截止时间或已取消
       content:
         application/json:
           schema:
@@ -116,4 +204,56 @@ components:
         message: { type: string, example: ok }
         data: { type: object, additionalProperties: true }
         traceId: { type: string, example: ticket-list-001 }
+    BookingRequest:
+      type: object
+      required: [kind, resourceId, slotId, startAt, endAt]
+      properties:
+        kind: { type: string, enum: [TICKET, PROJECT, HOTEL, RESTAURANT] }
+        resourceId: { type: string, example: night_show }
+        slotId: { type: string, example: project-slot-night-show-1930 }
+        startAt: { type: string, format: date-time, example: '2026-09-03T19:30:00+08:00' }
+        endAt: { type: string, format: date-time, example: '2026-09-03T21:00:00+08:00' }
+        addons:
+          type: array
+          items: { $ref: '#/components/schemas/BookingAddonRequest' }
+    BookingAddonRequest:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [FAST_PASS] }
+    BookingRecord:
+      type: object
+      required: [id, kind, resourceId, startAt, endAt, status, cancellableUntil]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [TICKET, PROJECT, HOTEL, RESTAURANT] }
+        resourceId: { type: string }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        status: { type: string, enum: [PENDING_PAYMENT, CONFIRMED, CANCELLED, USED, EXPIRED] }
+        cancellableUntil: { type: string, format: date-time }
+        addons:
+          type: array
+          items: { $ref: '#/components/schemas/BookingAddon' }
+    BookingAddon:
+      type: object
+      required: [type, status]
+      properties:
+        type: { type: string, enum: [FAST_PASS] }
+        status: { type: string, enum: [CONFIRMED, CANCELLED] }
+        priceFen: { type: integer, example: 2800 }
+    ScheduleConflictResponse:
+      type: object
+      required: [code, message, data, traceId]
+      properties:
+        code: { type: integer, example: 40901 }
+        message: { type: string, example: SCHEDULE_CONFLICT }
+        data:
+          type: object
+          required: [conflicts]
+          properties:
+            conflicts:
+              type: array
+              items: { $ref: '#/components/schemas/BookingRecord' }
+        traceId: { type: string, example: booking-conflict-001 }
 
