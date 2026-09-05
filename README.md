@@ -22,10 +22,10 @@
 
 1. 安装当前稳定版 DevEco Studio，并下载与工程匹配的 HarmonyOS SDK（工程目标为 API 12）。
 2. 使用 DevEco Studio 打开 `app` 目录，等待依赖同步。
-3. 选择 HarmonyOS 模拟器或真机，运行 `entry` 模块。
+3. 选择 HarmonyOS 预览环境或真机，运行 `entry` 模块。
 4. 本地开发阶段可使用内置测试账号 `tourist` 与密码 `123456` 登录；接入正式认证服务后，请使用真实账号体系。
 
-客户端的数据访问集中在 `ScenicRepository`。当前 App 启动后会从 `app/entry/src/main/ets/config/ApiConfig.ets` 配置的后端地址同步票务、景点、路线、预约项目、商户、商城商品和演示账号角色；如果后端不可用，会回退到本地演示数据，保证页面仍可浏览。后续接入正式景区服务时，可继续在仓储层接入真实支付、地图、短信、推送和闸机核验接口，并遵循 `docs/openapi.yaml`。
+客户端的数据访问集中在 `ScenicRepository`。当前 App 启动后会从 `app/entry/src/main/ets/config/ApiConfig.ets` 配置的后端地址同步票务、景点、路线、预约项目、商户、商城商品和账号角色；如果后端不可用，会自动启用本地基础数据，保证页面仍可浏览。后续接入正式景区服务时，可继续在仓储层接入真实支付、地图、短信、推送和闸机核验接口，并遵循 `docs/openapi.yaml`。
 
 ### 智能咨询配置
 
@@ -54,9 +54,28 @@ export const AI_API_KEY: string = '你的 API Key';
 5. 访问 `http://127.0.0.1:8080/health` 验证服务和 MySQL 连接；接口前缀为 `/api/v1`。
 6. 执行 `cjpm test` 运行库存、预约与金额计算测试。
 
-仓颉服务提供 REST API、MySQL 查询、库存与预约领域逻辑。当前票务列表、景点、路线、预约项目、商户和商城商品接口会从 MySQL 读取；创建订单、退款、预约提交、积分和反馈接口仍是演示响应。正式部署时，可在仓储适配层继续接入事务写入，并按需调用 `infra/redis_reserve.lua` 完成 Redis 原子扣减。
+仓颉服务提供 REST API、MySQL 查询、库存与预约领域逻辑。当前票务列表、景点、路线、预约项目、商户和商城商品接口会从 MySQL 读取；创建订单、退款、预约提交、积分和反馈接口提供基础业务响应。正式部署时，可在仓储适配层继续接入事务写入，并按需调用 `infra/redis_reserve.lua` 完成 Redis 原子扣减。
 
 ## 基础设施与压测
+
+### 本地 Valhalla 步行路线服务
+
+导览页支持使用 Valhalla 的真实步行路网生成个性化路线。App 会依次尝试
+`app/entry/src/main/ets/config/ApiConfig.ets` 中的 Valhalla 地址；服务不可用时自动切换到本地路网计算。
+
+1. 准备杭州区域的 OpenStreetMap `.osm.pbf` 文件，并放入 `infra/valhalla/custom_files/`。
+2. 为避免导入全国数据，建议用可信的区域提取工具提前裁剪到杭州或西湖周边。
+3. 启动路线服务：
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d valhalla
+```
+
+4. 第一次启动会根据 PBF 构建路线瓦片，完成后访问 `http://127.0.0.1:8002/status` 检查状态。
+5. 本机预览可使用 `127.0.0.1:8002`；真机需要把 `VALHALLA_BASE_URLS` 中最后一项改为开发机的局域网 IP，并确保防火墙允许访问 8002 端口。
+6. 登录游客账号，在“导览 → 个性化错峰行程”选择出发位置后生成路线。结果卡会明确显示“Valhalla真实步行路网”或“本地路网计算”。
+
+当前最小版本使用 Valhalla 的 `/sources_to_targets` 计算多点矩阵，并在开始导航时使用 `/route` 获取首段步行距离、时间和指令。当前 SVG 继续作为景区示意底图；后续可根据 `/route` 返回的 shape 增加真实路线折线。
 
 运行容器前，请在终端为数据库密码设置安全的环境变量，再执行：
 

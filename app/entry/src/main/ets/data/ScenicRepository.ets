@@ -177,7 +177,9 @@ export class ScenicRepository {
         y: fallback.y,
         audioMinutes: fallback.audioMinutes,
         interestTags: fallback.interestTags,
-        stayMinutes: fallback.stayMinutes
+        stayMinutes: fallback.stayMinutes,
+        longitude: row.longitude > 0 ? row.longitude : fallback.longitude,
+        latitude: row.latitude > 0 ? row.latitude : fallback.latitude
       });
     }
     return spots;

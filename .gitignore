@@ -13,4 +13,6 @@ build-script-cache/
 *.log
 .env
 **/.env
+infra/valhalla/custom_files/*
+!infra/valhalla/custom_files/.gitkeep
 

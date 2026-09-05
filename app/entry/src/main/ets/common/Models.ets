@@ -20,6 +20,28 @@ export interface ScenicSpot {
   audioMinutes: number;
   interestTags: string[];
   stayMinutes: number;
+  longitude: number;
+  latitude: number;
+}
+
+export interface GeoPoint {
+  name: string;
+  longitude: number;
+  latitude: number;
+}
+
+export interface WalkingMatrix {
+  minutes: number[][];
+  distancesMeters: number[][];
+  source: string;
+}
+
+export interface WalkingRoute {
+  distanceMeters: number;
+  durationMinutes: number;
+  firstInstruction: string;
+  source: string;
+  points: GeoPoint[];
 }
 
 export interface RecommendedRoute {
@@ -44,6 +66,17 @@ export interface ItineraryProfile {
   interestTags: string[];
 }
 
+export interface PersonalRouteRequirements {
+  companions: string[];
+  walkingIntensity: string;
+  avoidCrowds: boolean;
+  mustVisitSpotIds: string[];
+  excludedSpotIds: string[];
+  endAtSpotId: string;
+  startTime: string;
+  summary: string;
+}
+
 export interface ItineraryPlan {
   id: string;
   title: string;
@@ -54,6 +87,8 @@ export interface ItineraryPlan {
   savedWaitMinutes: number;
   explanation: string;
   generatedAt: string;
+  distanceMeters: number;
+  routingSource: string;
 }
 
 export interface ItineraryReplanResult {
@@ -190,12 +225,12 @@ export const DEMO_TICKETS: TicketProduct[] = [
 ];
 
 export const DEMO_SPOTS: ScenicSpot[] = [
-  { id: 'broken_bridge', name: '断桥残雪', subtitle: '白堤东端的经典湖景点位', imageName: 'spot_broken_bridge', crowdLevel: '较拥挤', crowdPercent: 86, x: 76, y: 12, audioMinutes: 5, interestTags: ['文化', '摄影'], stayMinutes: 32 },
-  { id: 'solitary_hill', name: '孤山', subtitle: '西湖中最大的天然岛屿', imageName: 'spot_solitary_hill', crowdLevel: '适中', crowdPercent: 58, x: 50, y: 25, audioMinutes: 6, interestTags: ['文化', '摄影', '休闲'], stayMinutes: 36 },
-  { id: 'quyuan', name: '曲院风荷', subtitle: '北山西侧的荷风景观', imageName: 'spot_quyuan', crowdLevel: '畅通', crowdPercent: 35, x: 7, y: 34, audioMinutes: 4, interestTags: ['自然', '摄影', '亲子'], stayMinutes: 30 },
-  { id: 'sudi', name: '苏堤春晓', subtitle: '贯穿湖面的长堤慢行线', imageName: 'spot_sudi', crowdLevel: '适中', crowdPercent: 61, x: 31, y: 49, audioMinutes: 7, interestTags: ['休闲', '自然', '文化'], stayMinutes: 38 },
-  { id: 'flower_harbor', name: '花港观鱼', subtitle: '南端园林与亲子游览区', imageName: 'spot_flower_harbor', crowdLevel: '畅通', crowdPercent: 42, x: 11, y: 75, audioMinutes: 5, interestTags: ['亲子', '自然', '摄影'], stayMinutes: 34 },
-  { id: 'leifeng_pagoda', name: '雷峰塔', subtitle: '夕照山上的南岸地标', imageName: 'spot_leifeng_pagoda', crowdLevel: '繁忙', crowdPercent: 74, x: 69, y: 73, audioMinutes: 8, interestTags: ['文化', '摄影'], stayMinutes: 42 }
+  { id: 'broken_bridge', name: '断桥残雪', subtitle: '白堤东端的经典湖景点位', imageName: 'spot_broken_bridge', crowdLevel: '较拥挤', crowdPercent: 86, x: 57.1, y: 23.0, audioMinutes: 5, interestTags: ['文化', '摄影'], stayMinutes: 32, longitude: 120.148563, latitude: 30.258516 },
+  { id: 'solitary_hill', name: '孤山', subtitle: '西湖中最大的天然岛屿', imageName: 'spot_solitary_hill', crowdLevel: '适中', crowdPercent: 58, x: 44.6, y: 32.2, audioMinutes: 6, interestTags: ['文化', '摄影', '休闲'], stayMinutes: 36, longitude: 120.142281, latitude: 30.253917 },
+  { id: 'quyuan', name: '曲院风荷', subtitle: '北山西侧的荷风景观', imageName: 'spot_quyuan', crowdLevel: '畅通', crowdPercent: 35, x: 23.3, y: 34.0, audioMinutes: 4, interestTags: ['自然', '摄影', '亲子'], stayMinutes: 30, longitude: 120.131648, latitude: 30.252976 },
+  { id: 'sudi', name: '苏堤春晓', subtitle: '贯穿湖面的长堤慢行线', imageName: 'spot_sudi', crowdLevel: '适中', crowdPercent: 61, x: 35.8, y: 60.3, audioMinutes: 7, interestTags: ['休闲', '自然', '文化'], stayMinutes: 38, longitude: 120.137916, latitude: 30.239867 },
+  { id: 'flower_harbor', name: '花港观鱼', subtitle: '南端园林与亲子游览区', imageName: 'spot_flower_harbor', crowdLevel: '畅通', crowdPercent: 42, x: 38.9, y: 77.4, audioMinutes: 5, interestTags: ['亲子', '自然', '摄影'], stayMinutes: 34, longitude: 120.139426, latitude: 30.231321 },
+  { id: 'leifeng_pagoda', name: '雷峰塔', subtitle: '夕照山上的南岸地标', imageName: 'spot_leifeng_pagoda', crowdLevel: '繁忙', crowdPercent: 74, x: 57.2, y: 72.2, audioMinutes: 8, interestTags: ['文化', '摄影'], stayMinutes: 42, longitude: 120.148597, latitude: 30.233913 }
 ];
 
 export const DEMO_ROUTES: RecommendedRoute[] = [

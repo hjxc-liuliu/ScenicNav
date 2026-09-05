@@ -3,9 +3,11 @@ import {
   ItineraryPlan,
   ItineraryProfile,
   ItineraryReplanResult,
+  PersonalRouteRequirements,
   RecommendedRoute,
   ScenicSpot,
-  TicketProduct
+  TicketProduct,
+  WalkingMatrix
 } from '../common/Models';
 import { ScenicRepository } from '../data/ScenicRepository';
 
@@ -83,26 +85,47 @@ export class ScenicViewModel {
   }
 
   generateItinerary(profile: ItineraryProfile, spots: ScenicSpot[], snapshots: CrowdSnapshot[]): ItineraryPlan {
+    return this.generateItineraryWithMatrix(profile, spots, snapshots, undefined);
+  }
+
+  generateItineraryWithMatrix(
+    profile: ItineraryProfile,
+    spots: ScenicSpot[],
+    snapshots: CrowdSnapshot[],
+    matrix: WalkingMatrix | undefined,
+    requirements?: PersonalRouteRequirements
+  ): ItineraryPlan {
     const selectedSpotIds: string[] = [];
     const avoidedSpotNames: string[] = [];
     const targetStopCount = Math.min(spots.length, Math.max(2, Math.floor(profile.durationMinutes / 60)));
     let elapsedMinutes = 0;
     let currentX = 31;
     let currentY = 49;
+    let currentMatrixIndex = 0;
+    let totalDistanceMeters = 0;
 
     for (let round = 0; round < targetStopCount; round++) {
-      let candidate = this.findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, false);
+      let candidate = this.findBestCandidateWithMatrix(profile, spots, snapshots, selectedSpotIds,
+        currentX, currentY, currentMatrixIndex, elapsedMinutes,
+        requirements === undefined ? false : !requirements.avoidCrowds,
+        matrix, requirements, round, targetStopCount);
       if (candidate === undefined) {
-        candidate = this.findBestCandidate(profile, spots, snapshots, selectedSpotIds, currentX, currentY, elapsedMinutes, true);
+        candidate = this.findBestCandidateWithMatrix(profile, spots, snapshots, selectedSpotIds,
+          currentX, currentY, currentMatrixIndex, elapsedMinutes, true, matrix, requirements, round, targetStopCount);
       }
       if (candidate === undefined) {
         break;
       }
-      const travelMinutes = this.estimatedWalkMinutes(currentX, currentY, candidate.x, candidate.y);
+      const candidateIndex = this.spotIndex(spots, candidate.id) + 1;
+      const travelMinutes = this.matrixMinutes(matrix, currentMatrixIndex, candidateIndex,
+        this.estimatedWalkMinutes(currentX, currentY, candidate.x, candidate.y));
+      totalDistanceMeters = totalDistanceMeters + this.matrixDistance(matrix, currentMatrixIndex, candidateIndex,
+        travelMinutes * 75);
       selectedSpotIds.push(candidate.id);
       elapsedMinutes = elapsedMinutes + travelMinutes + candidate.stayMinutes;
       currentX = candidate.x;
       currentY = candidate.y;
+      currentMatrixIndex = candidateIndex;
     }
 
     for (let index = 0; index < spots.length; index++) {
@@ -114,9 +137,12 @@ export class ScenicViewModel {
 
     const comfortScore = this.comfortScore(selectedSpotIds, spots, snapshots);
     const savedWaitMinutes = avoidedSpotNames.length * 18;
-    const explanation = avoidedSpotNames.length > 0
+    let explanation = avoidedSpotNames.length > 0
       ? `已避开 ${avoidedSpotNames.join('、')} 的预测高峰，优先安排同类低热度景点。`
       : '当前客流平稳，已按兴趣、步行距离与游玩时间生成舒适路线。';
+    if (requirements !== undefined && requirements.summary.length > 0) {
+      explanation = `${requirements.summary}；${explanation}`;
+    }
     return {
       id: `itinerary-${Date.now()}`,
       title: `${profile.durationMinutes / 60} 小时${profile.interestTags.join('·')}错峰行程`,
@@ -126,7 +152,9 @@ export class ScenicViewModel {
       avoidedSpotNames: avoidedSpotNames,
       savedWaitMinutes: savedWaitMinutes,
       explanation: explanation,
-      generatedAt: '刚刚'
+      generatedAt: '刚刚',
+      distanceMeters: totalDistanceMeters,
+      routingSource: matrix === undefined ? '本地路网计算' : matrix.source
     };
   }
 
@@ -168,7 +196,9 @@ export class ScenicViewModel {
       avoidedSpotNames: plan.avoidedSpotNames,
       savedWaitMinutes: plan.savedWaitMinutes + replacedNames.length * 18,
       explanation: reason,
-      generatedAt: '刚刚'
+      generatedAt: '刚刚',
+      distanceMeters: plan.distanceMeters,
+      routingSource: plan.routingSource
     };
     return { plan: replanned, changed: true, reason: reason };
   }
@@ -205,6 +235,96 @@ export class ScenicViewModel {
       }
     }
     return best;
+  }
+
+  private findBestCandidateWithMatrix(
+    profile: ItineraryProfile,
+    spots: ScenicSpot[],
+    snapshots: CrowdSnapshot[],
+    selectedSpotIds: string[],
+    currentX: number,
+    currentY: number,
+    currentMatrixIndex: number,
+    elapsedMinutes: number,
+    allowHighCrowd: boolean,
+    matrix: WalkingMatrix | undefined,
+    requirements: PersonalRouteRequirements | undefined,
+    round: number,
+    targetStopCount: number
+  ): ScenicSpot | undefined {
+    let best: ScenicSpot | undefined = undefined;
+    let bestScore = -100000;
+    for (let index = 0; index < spots.length; index++) {
+      const spot = spots[index];
+      if (this.containsSpotId(selectedSpotIds, spot.id)) {
+        continue;
+      }
+      if (requirements !== undefined && this.containsSpotId(requirements.excludedSpotIds, spot.id)) {
+        continue;
+      }
+      if (requirements !== undefined && requirements.endAtSpotId.length > 0 &&
+        spot.id === requirements.endAtSpotId && round + 1 < targetStopCount) {
+        continue;
+      }
+      const snapshot = this.crowdForSpot(spot, snapshots);
+      if (!allowHighCrowd && this.isHighCrowd(snapshot)) {
+        continue;
+      }
+      const fallback = this.estimatedWalkMinutes(currentX, currentY, spot.x, spot.y);
+      const walkMinutes = this.matrixMinutes(matrix, currentMatrixIndex, index + 1, fallback);
+      if (elapsedMinutes + walkMinutes + spot.stayMinutes > profile.durationMinutes) {
+        continue;
+      }
+      let score = this.interestMatchCount(spot, profile.interestTags) * 100 +
+        (100 - snapshot.forecastPercent) - walkMinutes * this.walkingPenalty(requirements);
+      if (requirements !== undefined && this.containsSpotId(requirements.mustVisitSpotIds, spot.id)) {
+        score = score + 1000;
+      }
+      if (requirements !== undefined && requirements.endAtSpotId === spot.id) {
+        score = score + 1200;
+      }
+      if (score > bestScore) {
+        best = spot;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  private walkingPenalty(requirements: PersonalRouteRequirements | undefined): number {
+    if (requirements === undefined) {
+      return 3;
+    }
+    if (requirements.walkingIntensity === '低') {
+      return 7;
+    }
+    if (requirements.walkingIntensity === '高') {
+      return 1;
+    }
+    return 3;
+  }
+
+  private matrixMinutes(matrix: WalkingMatrix | undefined, from: number, to: number, fallback: number): number {
+    if (matrix === undefined || from >= matrix.minutes.length || to >= matrix.minutes[from].length) {
+      return fallback;
+    }
+    return matrix.minutes[from][to];
+  }
+
+  private matrixDistance(matrix: WalkingMatrix | undefined, from: number, to: number, fallback: number): number {
+    if (matrix === undefined || from >= matrix.distancesMeters.length || to >= matrix.distancesMeters[from].length) {
+      return fallback;
+    }
+    return matrix.distancesMeters[from][to];
+  }
+
+  private spotIndex(spots: ScenicSpot[], spotId: string): number {
+    for (let index = 0; index < spots.length; index++) {
+      if (spots[index].id === spotId) {
+        return index;
+      }
+    }
+    return 0;
   }
 
   private findAlternative(

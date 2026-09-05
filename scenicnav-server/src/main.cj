@@ -43,7 +43,7 @@ func demoTicketsJson(): String {
 
 func demoSpotsJson(): String {
     return "[" +
-        "{\"id\":\"broken_bridge\",\"name\":\"断桥残雪\",\"subtitle\":\"白堤东端的经典湖景点位\",\"crowdPercent\":86,\"updatedAt\":\"刚刚\"}," +
+        "{\"id\":\"broken_bridge\",\"name\":\"断桥残雪\",\"subtitle\":\"白堤东端的经典湖景点位\",\"crowdPercent\":86,\"updatedAt\":\"刚刚\",\"longitude\":120.148563,\"latitude\":30.258516}," +
         "{\"id\":\"solitary_hill\",\"name\":\"孤山\",\"subtitle\":\"西湖中最大的天然岛屿\",\"crowdPercent\":58,\"updatedAt\":\"刚刚\"}," +
         "{\"id\":\"quyuan\",\"name\":\"曲院风荷\",\"subtitle\":\"北山西侧的荷风景观\",\"crowdPercent\":35,\"updatedAt\":\"刚刚\"}," +
         "{\"id\":\"sudi\",\"name\":\"苏堤春晓\",\"subtitle\":\"贯穿湖面的长堤慢行线\",\"crowdPercent\":61,\"updatedAt\":\"刚刚\"}," +

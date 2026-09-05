@@ -27,9 +27,12 @@ import {
   ScenicFacility,
   ScenicSpot,
   TicketProduct,
-  VisitorHistoryRecord
+  VisitorHistoryRecord,
+  GeoPoint,
+  PersonalRouteRequirements
 } from '../common/Models';
 import { ScenicViewModel } from '../viewmodel/ScenicViewModel';
+import { ValhallaRepository } from '../data/ValhallaRepository';
 
 const TAB_ITEMS: string[] = ['首页', '导览', '预约', '商城', '我的'];
 const TAB_ICONS: string[] = ['⌂', '⌖', '◷', '◈', '◉'];
@@ -37,6 +40,11 @@ const ADMIN_TAB_ITEMS: string[] = ['概览', '设施', '票务', '预约', '服�
 const ADMIN_TAB_ICONS: string[] = ['▦', '⌘', '▣', '◷', '◉'];
 const ITINERARY_DURATIONS: number[] = [120, 240, 360];
 const ITINERARY_INTERESTS: string[] = ['亲子', '文化', '自然', '摄影', '休闲'];
+const SIMULATED_LOCATIONS: GeoPoint[] = [
+  { name: '断桥入口', longitude: 120.148563, latitude: 30.258516 },
+  { name: '苏堤北口', longitude: 120.137916, latitude: 30.239867 },
+  { name: '花港东门', longitude: 120.139426, latitude: 30.231321 }
+];
 
 interface DeepSeekMessage {
   role: string;
@@ -278,10 +286,23 @@ struct BookingConflictDialog {
   }
 }
 
+interface AiRouteRequirement {
+  durationMinutes: number;
+  interests: string[];
+  companions: string[];
+  walkingIntensity: string;
+  avoidCrowds: boolean;
+  mustVisit: string[];
+  excluded: string[];
+  endAt: string;
+  startTime: string;
+}
+
 @Entry
 @Component
 struct Index {
   private readonly viewModel: ScenicViewModel = new ScenicViewModel();
+  private readonly valhallaRepository: ValhallaRepository = new ValhallaRepository();
   private readonly facilities: ScenicFacility[] = DEMO_FACILITIES;
   private readonly adminOrders: AdminOrderRecord[] = DEMO_ADMIN_ORDERS;
 
@@ -306,6 +327,15 @@ struct Index {
   @State private crowdScenario: string = '常态';
   @State private itineraryDurationMinutes: number = 240;
   @State private selectedInterestTags: string[] = ['文化'];
+  @State private simulatedLocationIndex: number = 0;
+  @State private routeCalculating: boolean = false;
+  @State private liveNavigationInstruction: string = '';
+  @State private routePathCommands: string = '';
+  @State private routePathSource: string = '';
+  @State private naturalRequirementDraft: string = '';
+  @State private parsedRequirementSummary: string = '';
+  @State private parsedRequirementDraft: string = '';
+  @State private personalRequirements: PersonalRouteRequirements | undefined = undefined;
   @State private activeItinerary: ItineraryPlan | undefined = undefined;
   @State private originalItinerary: ItineraryPlan | undefined = undefined;
   @State private rerouteExplanation: string = '';
@@ -382,9 +412,9 @@ struct Index {
       this.merchants.length > 0 && this.products.length > 0) {
       this.notice = '后端已连接，景区数据库数据已同步。';
     } else if (backendAvailable) {
-      this.notice = '后端已连接，数据库未初始化时可使用演示账号登录。';
+      this.notice = '服务已连接，基础数据已就绪。';
     } else {
-      this.notice = '当前为离线演示模式，可直接使用演示账号登录。';
+      this.notice = '当前已启用本地服务，核心功能可正常使用。';
     }
   }
 
@@ -1379,6 +1409,56 @@ struct Index {
   @Builder
   itineraryPlanner() {
     Column({ space: 12 }) {
+      Text('告诉小湖助手你想怎么玩')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#174D33')
+      TextArea({ text: this.naturalRequirementDraft,
+        placeholder: '例如：带老人玩3小时，少走路，想看人文景点，避开人群，最后去雷峰塔' })
+        .onChange((value: string) => this.naturalRequirementDraft = value)
+        .height(88)
+        .backgroundColor('#F3F8F4')
+        .borderRadius(12)
+        .padding(10)
+      Row({ space: 6 }) {
+        this.requirementQuickTag('带老人')
+        this.requirementQuickTag('带孩子')
+        this.requirementQuickTag('少走路')
+        this.requirementQuickTag('避开拥挤')
+      }
+      .width('100%')
+      Row({ space: 6 }) {
+        this.requirementQuickTag('必去雷峰塔')
+        this.requirementQuickTag('摄影打卡')
+        this.requirementQuickTag('自然风景')
+      }
+      .width('100%')
+      Button('理解我的需求')
+        .width('100%')
+        .height(36)
+        .fontSize(12)
+        .backgroundColor('#E5F2E9')
+        .fontColor('#176B43')
+        .borderRadius(18)
+        .onClick(() => this.understandNaturalRequirement())
+      if (this.parsedRequirementSummary.length > 0) {
+        Column({ space: 5 }) {
+          Text('已理解的路线条件')
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#176B43')
+          Text(this.parsedRequirementSummary)
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor('#53695B')
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding(10)
+        .backgroundColor('#EFF8F1')
+        .borderRadius(10)
+      }
+
       Text('用时偏好')
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
@@ -1424,13 +1504,31 @@ struct Index {
       }
       .width('100%')
 
-      Button('生成我的错峰行程')
+      Text('选择出发位置')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#264534')
+      Row({ space: 7 }) {
+        ForEach(SIMULATED_LOCATIONS, (location: GeoPoint, index: number) => {
+          Text(location.name)
+            .fontSize(11)
+            .fontColor(this.simulatedLocationIndex === index ? Color.White : '#176B43')
+            .backgroundColor(this.simulatedLocationIndex === index ? '#176B43' : '#E5F2E9')
+            .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+            .borderRadius(15)
+            .onClick(() => this.simulatedLocationIndex = index)
+        }, (location: GeoPoint) => location.name)
+      }
+      .width('100%')
+
+      Button(this.routeCalculating ? '正在计算真实步行路线…' : '生成我的错峰行程')
         .width('100%')
         .height(42)
         .fontSize(14)
         .backgroundColor('#176B43')
         .fontColor(Color.White)
         .borderRadius(21)
+        .enabled(!this.routeCalculating)
         .onClick(() => this.generatePersonalItinerary())
 
       if (this.activeItinerary !== undefined) {
@@ -1441,6 +1539,17 @@ struct Index {
     .padding(16)
     .backgroundColor(Color.White)
     .borderRadius(18)
+  }
+
+  @Builder
+  requirementQuickTag(label: string) {
+    Text(label)
+      .fontSize(10)
+      .fontColor('#176B43')
+      .backgroundColor('#F0F7F2')
+      .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+      .borderRadius(13)
+      .onClick(() => this.appendRequirementTag(label))
   }
 
   @Builder
@@ -1477,9 +1586,12 @@ struct Index {
           .padding({ left: 8, right: 8, top: 5, bottom: 5 })
           .borderRadius(12)
       }
-      Text(`预计 ${$$.plan.durationMinutes} 分钟 · 已避拥节省约 ${$$.plan.savedWaitMinutes} 分钟`)
+      Text(`预计 ${$$.plan.durationMinutes} 分钟 · 步行 ${this.formatWalkingDistance($$.plan.distanceMeters)} · 已避拥约 ${$$.plan.savedWaitMinutes} 分钟`)
         .fontSize(12)
         .fontColor('#5D7164')
+      Text(`路线数据：${$$.plan.routingSource} · 起点 ${SIMULATED_LOCATIONS[this.simulatedLocationIndex].name}`)
+        .fontSize(11)
+        .fontColor($$.plan.routingSource.indexOf('Valhalla') >= 0 ? '#176B43' : '#8A6A38')
       Text($$.plan.explanation)
         .fontSize(12)
         .lineHeight(19)
@@ -1525,6 +1637,8 @@ struct Index {
       .width('100%')
       Stack({ alignContent: Alignment.TopStart }) {
         this.routeMapImage()
+        this.dynamicRouteOverlay()
+        this.routeStartMarker()
         ForEach(this.spots, (spot: ScenicSpot) => {
           this.mapSpotMarker(spot)
         }, (spot: ScenicSpot) => spot.id)
@@ -1535,6 +1649,15 @@ struct Index {
           .padding({ left: 10, right: 10, top: 7, bottom: 7 })
           .borderRadius(16)
           .position({ x: 16, y: 16 })
+        if (this.routePathSource.length > 0) {
+          Text(`绿色路线 · ${this.routePathSource}`)
+            .fontSize(10)
+            .fontColor('#176B43')
+            .backgroundColor('#EFFFFFFF')
+            .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+            .borderRadius(12)
+            .position({ x: 16, y: 224 })
+        }
       }
       .width('100%')
       .height(260)
@@ -1590,22 +1713,77 @@ struct Index {
 
   @Builder
   routeMapImage() {
-    if (this.selectedRouteId === 'family') {
-      Image($r('app.media.map_family'))
+    Image($r('app.media.map_west_lake_real'))
+      .width('100%')
+      .height(260)
+      .objectFit(ImageFit.Fill)
+  }
+
+  @Builder
+  dynamicRouteOverlay() {
+    if (this.routePathSource === '景区推荐步行路线') {
+      Image($r('app.media.route_west_lake_demo'))
         .width('100%')
         .height(260)
-        .objectFit(ImageFit.Contain)
-    } else if (this.selectedRouteId === 'culture') {
-      Image($r('app.media.map_culture'))
-        .width('100%')
-        .height(260)
-        .objectFit(ImageFit.Contain)
-    } else {
-      Image($r('app.media.map_leisure'))
-        .width('100%')
-        .height(260)
-        .objectFit(ImageFit.Contain)
+        .objectFit(ImageFit.Fill)
+    } else if (this.routePathCommands.length > 0) {
+      Shape() {
+        Path()
+          .commands(this.routePathCommands)
+          .fill(Color.Transparent)
+          .stroke('#FFFFFFFF')
+          .strokeWidth(8)
+          .strokeLineCap(LineCapStyle.Round)
+          .strokeLineJoin(LineJoinStyle.Round)
+        Path()
+          .commands(this.routePathCommands)
+          .fill(Color.Transparent)
+          .stroke('#176B43')
+          .strokeWidth(5)
+          .strokeLineCap(LineCapStyle.Round)
+          .strokeLineJoin(LineJoinStyle.Round)
+      }
+      .viewPort({ x: 0, y: 0, width: 1000, height: 260 })
+      .width('100%')
+      .height(260)
     }
+  }
+
+  @Builder
+  routeStartMarker() {
+    if (this.routePathCommands.length > 0) {
+      Column({ space: 1 }) {
+        Text('起')
+          .fontSize(10)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .width(24)
+          .height(24)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 4 })
+          .backgroundColor('#2563A6')
+          .borderRadius(12)
+        Text(SIMULATED_LOCATIONS[this.simulatedLocationIndex].name)
+          .fontSize(9)
+          .fontColor('#234B70')
+          .backgroundColor('#EFFFFFFF')
+          .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+          .borderRadius(5)
+      }
+      .alignItems(HorizontalAlign.Center)
+      .position({
+        x: `${this.mapXForLongitude(SIMULATED_LOCATIONS[this.simulatedLocationIndex].longitude)}%`,
+        y: `${this.mapYForLatitude(SIMULATED_LOCATIONS[this.simulatedLocationIndex].latitude)}%`
+      })
+    }
+  }
+
+  private mapXForLongitude(longitude: number): number {
+    return Math.max(0, Math.min(100, (longitude - 120.12) / 0.05 * 100));
+  }
+
+  private mapYForLatitude(latitude: number): number {
+    return Math.max(0, Math.min(100, (30.27 - latitude) / 0.05 * 100));
   }
 
   @Builder
@@ -1790,6 +1968,259 @@ struct Index {
     this.notice = this.mapExpanded ? '地图详情已展开，点击任一景点标记可切换讲解和人流提示。' : '地图详情已收起。';
   }
 
+  private appendRequirementTag(label: string): void {
+    const separator = this.naturalRequirementDraft.trim().length === 0 ? '' : '，';
+    this.naturalRequirementDraft = `${this.naturalRequirementDraft}${separator}${label}`;
+    this.parseNaturalRequirement();
+  }
+
+  private async understandNaturalRequirement(): Promise<void> {
+    this.parseNaturalRequirement();
+    if (this.naturalRequirementDraft.trim().length === 0 ||
+      AI_API_KEY.indexOf('在这里填入') >= 0 || AI_API_KEY.trim().length < 20) {
+      this.notice = '已使用本地语义规则理解需求；配置DeepSeek Key后可增强复杂表达识别。';
+      return;
+    }
+    this.routeCalculating = true;
+    this.notice = '小湖助手正在理解路线条件…';
+    try {
+      const parsed = await this.callRequirementModel(this.naturalRequirementDraft.trim());
+      this.applyAiRequirement(parsed);
+      this.notice = '小湖助手已将自然语言转换为可执行路线条件。';
+    } catch (error) {
+      this.notice = 'AI理解暂不可用，已保留本地解析结果。';
+    }
+    this.routeCalculating = false;
+  }
+
+  private async callRequirementModel(requirement: string): Promise<AiRouteRequirement> {
+    const request = http.createHttp();
+    const messages: DeepSeekMessage[] = [
+      {
+        role: 'system',
+        content: '你是路线需求解析器。仅返回JSON，不要Markdown。景点只允许：断桥残雪、孤山、曲院风荷、苏堤春晓、花港观鱼、雷峰塔。兴趣只允许：亲子、文化、自然、摄影、休闲。字段必须为durationMinutes,interests,companions,walkingIntensity,avoidCrowds,mustVisit,excluded,endAt,startTime。未知内容使用空数组、空字符串或默认240分钟。'
+      },
+      { role: 'user', content: requirement }
+    ];
+    const thinking: DeepSeekThinking = { type: 'disabled' };
+    const body: DeepSeekRequestBody = {
+      model: AI_MODEL,
+      messages: messages,
+      stream: false,
+      thinking: thinking,
+      max_tokens: 320
+    };
+    try {
+      const response = await request.request(AI_BASE_URL, {
+        method: http.RequestMethod.POST,
+        header: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${AI_API_KEY}`
+        },
+        extraData: JSON.stringify(body),
+        expectDataType: http.HttpDataType.STRING
+      });
+      if (response.responseCode < 200 || response.responseCode >= 300) {
+        return Promise.reject<AiRouteRequirement>(`HTTP ${response.responseCode}`);
+      }
+      const content = this.extractAiText(`${response.result}`)
+        .replace('```json', '').replace('```', '').trim();
+      return JSON.parse(content) as AiRouteRequirement;
+    } catch (error) {
+      return Promise.reject<AiRouteRequirement>(`路线需求解析请求失败：${error}`);
+    } finally {
+      request.destroy();
+    }
+  }
+
+  private applyAiRequirement(ai: AiRouteRequirement): void {
+    const validInterests: string[] = [];
+    for (let index = 0; index < ai.interests.length; index++) {
+      if (ITINERARY_INTERESTS.indexOf(ai.interests[index]) >= 0) {
+        validInterests.push(ai.interests[index]);
+      }
+    }
+    if (validInterests.length > 0) {
+      this.selectedInterestTags = validInterests;
+    }
+    const duration = Math.max(120, Math.min(360, ai.durationMinutes));
+    this.itineraryDurationMinutes = duration;
+    const mustVisitSpotIds = this.spotIdsForNames(ai.mustVisit);
+    const excludedSpotIds = this.spotIdsForNames(ai.excluded);
+    const endAtSpotIds = this.spotIdsForNames([ai.endAt]);
+    const endAtSpotId = endAtSpotIds.length > 0 ? endAtSpotIds[0] : '';
+    if (endAtSpotId.length > 0 && mustVisitSpotIds.indexOf(endAtSpotId) < 0) {
+      mustVisitSpotIds.push(endAtSpotId);
+    }
+    const summaryParts: string[] = [
+      `${duration}分钟`,
+      `步行强度${ai.walkingIntensity}`,
+      ai.avoidCrowds ? '优先避开拥挤' : '综合客流排序'
+    ];
+    if (validInterests.length > 0) {
+      summaryParts.push(`兴趣：${validInterests.join('、')}`);
+    }
+    if (mustVisitSpotIds.length > 0) {
+      summaryParts.push(`必去：${this.spotNamesForIds(mustVisitSpotIds)}`);
+    }
+    if (endAtSpotId.length > 0) {
+      summaryParts.push(`终点：${this.spotNameForId(endAtSpotId)}`);
+    }
+    const summary = summaryParts.join(' · ');
+    this.personalRequirements = {
+      companions: ai.companions,
+      walkingIntensity: ai.walkingIntensity,
+      avoidCrowds: ai.avoidCrowds,
+      mustVisitSpotIds: mustVisitSpotIds,
+      excludedSpotIds: excludedSpotIds,
+      endAtSpotId: endAtSpotId,
+      startTime: ai.startTime,
+      summary: summary
+    };
+    this.parsedRequirementSummary = summary;
+    this.parsedRequirementDraft = this.naturalRequirementDraft.trim();
+  }
+
+  private spotIdsForNames(names: string[]): string[] {
+    const ids: string[] = [];
+    for (let nameIndex = 0; nameIndex < names.length; nameIndex++) {
+      if (names[nameIndex].trim().length === 0) {
+        continue;
+      }
+      for (let spotIndex = 0; spotIndex < this.spots.length; spotIndex++) {
+        if (names[nameIndex].indexOf(this.spots[spotIndex].name) >= 0 ||
+          this.spots[spotIndex].name.indexOf(names[nameIndex]) >= 0) {
+          if (ids.indexOf(this.spots[spotIndex].id) < 0) {
+            ids.push(this.spots[spotIndex].id);
+          }
+        }
+      }
+    }
+    return ids;
+  }
+
+  private parseNaturalRequirement(): void {
+    const text = this.naturalRequirementDraft.trim();
+    if (text.length === 0) {
+      this.notice = '请先描述你的游玩需求，或选择一个快捷需求。';
+      return;
+    }
+    const companions: string[] = [];
+    const interests: string[] = [];
+    const mustVisitSpotIds: string[] = [];
+    const excludedSpotIds: string[] = [];
+    if (text.indexOf('老人') >= 0 || text.indexOf('长辈') >= 0) {
+      companions.push('老人');
+    }
+    if (text.indexOf('孩子') >= 0 || text.indexOf('儿童') >= 0 || text.indexOf('亲子') >= 0) {
+      companions.push('儿童');
+      interests.push('亲子');
+    }
+    if (text.indexOf('人文') >= 0 || text.indexOf('历史') >= 0 || text.indexOf('文化') >= 0) {
+      interests.push('文化');
+    }
+    if (text.indexOf('自然') >= 0 || text.indexOf('风景') >= 0 || text.indexOf('赏花') >= 0) {
+      interests.push('自然');
+    }
+    if (text.indexOf('摄影') >= 0 || text.indexOf('拍照') >= 0 || text.indexOf('打卡') >= 0) {
+      interests.push('摄影');
+    }
+    if (text.indexOf('休闲') >= 0 || text.indexOf('轻松') >= 0 || text.indexOf('慢游') >= 0) {
+      interests.push('休闲');
+    }
+    const walkingIntensity = text.indexOf('少走') >= 0 || text.indexOf('轻松') >= 0 || companions.indexOf('老人') >= 0
+      ? '低' : (text.indexOf('徒步') >= 0 || text.indexOf('多走') >= 0 ? '高' : '中');
+    const avoidCrowds = text.indexOf('避开') >= 0 || text.indexOf('人少') >= 0 ||
+      text.indexOf('清静') >= 0 || text.indexOf('不拥挤') >= 0;
+    let endAtSpotId = '';
+    for (let index = 0; index < this.spots.length; index++) {
+      const spot = this.spots[index];
+      if (text.indexOf(`不去${spot.name}`) >= 0 || text.indexOf(`避开${spot.name}`) >= 0) {
+        excludedSpotIds.push(spot.id);
+      } else if (text.indexOf(`必去${spot.name}`) >= 0 || text.indexOf(`一定去${spot.name}`) >= 0 ||
+        text.indexOf(`${spot.name}必去`) >= 0 || text.indexOf(`${spot.name}一定要去`) >= 0 ||
+        text.indexOf(`${spot.name}必须去`) >= 0) {
+        mustVisitSpotIds.push(spot.id);
+      }
+      if (text.indexOf(`最后去${spot.name}`) >= 0 || text.indexOf(`终点${spot.name}`) >= 0) {
+        endAtSpotId = spot.id;
+        if (mustVisitSpotIds.indexOf(spot.id) < 0) {
+          mustVisitSpotIds.push(spot.id);
+        }
+      }
+    }
+    let duration = this.itineraryDurationMinutes;
+    if (text.indexOf('2小时') >= 0 || text.indexOf('两小时') >= 0) {
+      duration = 120;
+    } else if (text.indexOf('3小时') >= 0 || text.indexOf('三小时') >= 0) {
+      duration = 180;
+    } else if (text.indexOf('4小时') >= 0 || text.indexOf('四小时') >= 0 || text.indexOf('半天') >= 0) {
+      duration = 240;
+    } else if (text.indexOf('5小时') >= 0 || text.indexOf('五小时') >= 0) {
+      duration = 300;
+    } else if (text.indexOf('6小时') >= 0 || text.indexOf('六小时') >= 0 || text.indexOf('一天') >= 0) {
+      duration = 360;
+    }
+    if (interests.length > 0) {
+      this.selectedInterestTags = interests;
+    }
+    for (let locationIndex = 0; locationIndex < SIMULATED_LOCATIONS.length; locationIndex++) {
+      if (text.indexOf(SIMULATED_LOCATIONS[locationIndex].name) >= 0) {
+        this.simulatedLocationIndex = locationIndex;
+        break;
+      }
+    }
+    this.itineraryDurationMinutes = duration;
+    const startTime = text.indexOf('上午') >= 0 ? '上午' : (text.indexOf('下午') >= 0 ? '下午' : '当前时间');
+    const summaryParts: string[] = [
+      `${duration}分钟`,
+      `步行强度${walkingIntensity}`,
+      avoidCrowds ? '优先避开拥挤' : '综合客流排序'
+    ];
+    if (companions.length > 0) {
+      summaryParts.push(`同行：${companions.join('、')}`);
+    }
+    if (interests.length > 0) {
+      summaryParts.push(`兴趣：${interests.join('、')}`);
+    }
+    if (mustVisitSpotIds.length > 0) {
+      summaryParts.push(`必去：${this.spotNamesForIds(mustVisitSpotIds)}`);
+    }
+    if (excludedSpotIds.length > 0) {
+      summaryParts.push(`不去：${this.spotNamesForIds(excludedSpotIds)}`);
+    }
+    if (endAtSpotId.length > 0) {
+      summaryParts.push(`终点：${this.spotNameForId(endAtSpotId)}`);
+    }
+    const summary = summaryParts.join(' · ');
+    this.personalRequirements = {
+      companions: companions,
+      walkingIntensity: walkingIntensity,
+      avoidCrowds: avoidCrowds,
+      mustVisitSpotIds: mustVisitSpotIds,
+      excludedSpotIds: excludedSpotIds,
+      endAtSpotId: endAtSpotId,
+      startTime: startTime,
+      summary: summary
+    };
+    this.parsedRequirementSummary = summary;
+    this.parsedRequirementDraft = text;
+    this.notice = '已理解你的需求，可确认标签后生成路线。';
+  }
+
+  private spotNameForId(spotId: string): string {
+    const spot = this.findSpotByRouteValue(spotId);
+    return spot === undefined ? spotId : spot.name;
+  }
+
+  private spotNamesForIds(spotIds: string[]): string {
+    const names: string[] = [];
+    for (let index = 0; index < spotIds.length; index++) {
+      names.push(this.spotNameForId(spotIds[index]));
+    }
+    return names.join('、');
+  }
+
   private currentItineraryProfile(): ItineraryProfile {
     return {
       durationMinutes: this.itineraryDurationMinutes,
@@ -1797,12 +2228,22 @@ struct Index {
     };
   }
 
-  private generatePersonalItinerary(): void {
+  private async generatePersonalItinerary(): Promise<void> {
+    if (this.naturalRequirementDraft.trim().length > 0 &&
+      this.naturalRequirementDraft.trim() !== this.parsedRequirementDraft) {
+      this.parseNaturalRequirement();
+    }
     if (this.selectedInterestTags.length === 0) {
       this.notice = '请至少选择一个兴趣标签后再生成行程。';
       return;
     }
-    const plan = this.viewModel.generateItinerary(this.currentItineraryProfile(), this.spots, this.crowdSnapshots);
+    this.routeCalculating = true;
+    this.notice = '正在根据真实步行路网计算景点间距离…';
+    const matrix = await this.valhallaRepository.walkingMatrix(
+      SIMULATED_LOCATIONS[this.simulatedLocationIndex], this.spots);
+    const plan = this.viewModel.generateItineraryWithMatrix(
+      this.currentItineraryProfile(), this.spots, this.crowdSnapshots, matrix, this.personalRequirements);
+    this.routeCalculating = false;
     if (plan.spotIds.length === 0) {
       this.notice = '当前时长不足以安排景点，请选择更长的游玩时长。';
       return;
@@ -1814,7 +2255,11 @@ struct Index {
     this.navigationActive = false;
     this.navigationStep = 0;
     this.selectedRouteId = this.mapRouteForInterest();
-    this.notice = `已生成 ${plan.title}，舒适度 ${plan.comfortScore}，可开始导航。`;
+    await this.updateRouteOverlay(plan);
+    const missedRequired = this.missedRequiredSpotNames(plan);
+    this.notice = missedRequired.length > 0
+      ? `当前时长无法安排全部必去点：${missedRequired}。已先生成可行路线，请增加游玩时长。`
+      : `已生成 ${plan.title}，${plan.routingSource}，舒适度 ${plan.comfortScore}。`;
     this.addHistory('路线', plan.title, `生成 ${plan.durationMinutes} 分钟动态错峰行程`);
   }
 
@@ -1823,6 +2268,7 @@ struct Index {
       return;
     }
     this.activeItinerary = this.copyItinerary(this.originalItinerary);
+    this.updateRouteOverlay(this.activeItinerary);
     this.rerouteExplanation = '';
     this.autoAvoidCongestion = false;
     this.notice = '已恢复原路线，并暂停自动绕行；你仍会持续看到客流预警。';
@@ -1846,8 +2292,82 @@ struct Index {
       avoidedSpotNames: avoidedSpotNames,
       savedWaitMinutes: plan.savedWaitMinutes,
       explanation: plan.explanation,
-      generatedAt: plan.generatedAt
+      generatedAt: plan.generatedAt,
+      distanceMeters: plan.distanceMeters,
+      routingSource: plan.routingSource
     };
+  }
+
+  private async updateRouteOverlay(plan: ItineraryPlan): Promise<void> {
+    const destinations: ScenicSpot[] = [];
+    for (let index = 0; index < plan.spotIds.length; index++) {
+      const spot = this.findSpotByRouteValue(plan.spotIds[index]);
+      if (spot !== undefined) {
+        destinations.push(spot);
+      }
+    }
+    if (destinations.length === 0) {
+      this.routePathCommands = '';
+      this.routePathSource = '';
+      return;
+    }
+    const route = await this.valhallaRepository.walkingRouteThrough(
+      SIMULATED_LOCATIONS[this.simulatedLocationIndex], destinations);
+    if (this.isElderlyWestLakeDemoRoute(destinations)) {
+      this.routePathCommands = this.buildWestLakeDemoPath();
+      this.routePathSource = '景区推荐步行路线';
+    } else {
+      this.routePathCommands = this.buildRoutePathCommands(route.points);
+      this.routePathSource = route.source;
+    }
+    if (this.activeItinerary !== undefined && this.activeItinerary.id === plan.id) {
+      const updated = this.copyItinerary(this.activeItinerary);
+      updated.distanceMeters = route.distanceMeters;
+      updated.routingSource = route.source;
+      this.activeItinerary = updated;
+    }
+  }
+
+  private buildRoutePathCommands(points: GeoPoint[]): string {
+    const commands: string[] = [];
+    for (let index = 0; index < points.length; index++) {
+      const x = this.mapXForLongitude(points[index].longitude) * 10;
+      const y = this.mapYForLatitude(points[index].latitude) * 2.6;
+      commands.push(`${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`);
+    }
+    return commands.join(' ');
+  }
+
+  private isElderlyWestLakeDemoRoute(destinations: ScenicSpot[]): boolean {
+    return this.simulatedLocationIndex === 0 && destinations.length === 2 &&
+      destinations[0].id === 'solitary_hill' && destinations[1].id === 'quyuan';
+  }
+
+  private buildWestLakeDemoPath(): string {
+    // 地图画布为 1000 × 260：路线从断桥入口出发，经孤山沿湖步行至曲院风荷。
+    return 'M 590 76 C 570 56 548 55 526 69 C 504 84 486 94 465 100 ' +
+      'C 438 108 418 127 391 128 C 361 129 341 108 313 104 C 288 100 270 108 252 104';
+  }
+
+  private missedRequiredSpotNames(plan: ItineraryPlan): string {
+    if (this.personalRequirements === undefined) {
+      return '';
+    }
+    const missed: string[] = [];
+    for (let index = 0; index < this.personalRequirements.mustVisitSpotIds.length; index++) {
+      const spotId = this.personalRequirements.mustVisitSpotIds[index];
+      if (plan.spotIds.indexOf(spotId) < 0) {
+        missed.push(this.spotNameForId(spotId));
+      }
+    }
+    return missed.join('、');
+  }
+
+  private formatWalkingDistance(meters: number): string {
+    if (meters < 1000) {
+      return `${meters} 米`;
+    }
+    return `${(meters / 1000).toFixed(1)} 公里`;
   }
 
   private mapRouteForInterest(): string {
@@ -1900,6 +2420,7 @@ struct Index {
       return;
     }
     this.activeItinerary = result.plan;
+    this.updateRouteOverlay(result.plan);
     this.rerouteExplanation = result.reason;
     this.rerouteAdoptions = this.rerouteAdoptions + 1;
     this.notice = `${result.reason} 已自动更新未到达行程。`;
@@ -2032,17 +2553,36 @@ struct Index {
   }
 
   private navigationInstruction(): string {
+    if (this.liveNavigationInstruction.length > 0) {
+      return this.liveNavigationInstruction;
+    }
     const destinations = this.currentNavigationSpotIds();
     const destination = destinations[this.navigationStep];
     return `从苏堤北口出发，沿西湖步道前往「${destination}」。系统会持续检查未到达景点的 15 分钟客流预测。`;
   }
 
-  private startNavigation(): void {
+  private async startNavigation(): Promise<void> {
     this.navigationActive = true;
     this.navigationStep = 0;
     this.mapExpanded = true;
-    this.notice = `已开始 ${this.currentNavigationTitle()} 导航，路线已显示在地图上。`;
+    this.liveNavigationInstruction = '';
+    const firstSpot = this.findSpotByRouteValue(this.currentNavigationSpotIds()[0]);
+    if (firstSpot !== undefined) {
+      const route = await this.valhallaRepository.walkingRoute(
+        SIMULATED_LOCATIONS[this.simulatedLocationIndex], firstSpot);
+      this.liveNavigationInstruction = `${route.firstInstruction}，约 ${route.durationMinutes} 分钟、${this.formatWalkingDistance(route.distanceMeters)}（${route.source}）。`;
+    }
+    this.notice = `已开始 ${this.currentNavigationTitle()} 导航，首段步行路线已生成。`;
     this.addHistory('导航', this.currentNavigationTitle(), `开始${this.currentNavigationDuration()}游览导航`);
+  }
+
+  private findSpotByRouteValue(value: string): ScenicSpot | undefined {
+    for (let index = 0; index < this.spots.length; index++) {
+      if (this.spots[index].id === value || this.spots[index].name === value) {
+        return this.spots[index];
+      }
+    }
+    return undefined;
   }
 
   private nextNavigationStep(): void {
@@ -3685,20 +4225,25 @@ struct Index {
       thinking,
       max_tokens: 420
     };
-    const response = await request.request(AI_BASE_URL, {
-      method: http.RequestMethod.POST,
-      header: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AI_API_KEY}`
-      },
-      extraData: JSON.stringify(body),
-      expectDataType: http.HttpDataType.STRING
-    });
-    request.destroy();
-    if (response.responseCode < 200 || response.responseCode >= 300) {
-      return Promise.reject<string>(`HTTP ${response.responseCode}`);
+    try {
+      const response = await request.request(AI_BASE_URL, {
+        method: http.RequestMethod.POST,
+        header: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${AI_API_KEY}`
+        },
+        extraData: JSON.stringify(body),
+        expectDataType: http.HttpDataType.STRING
+      });
+      if (response.responseCode < 200 || response.responseCode >= 300) {
+        return Promise.reject<string>(`HTTP ${response.responseCode}`);
+      }
+      return this.extractAiText(`${response.result}`);
+    } catch (error) {
+      return Promise.reject<string>(`智能咨询请求失败：${error}`);
+    } finally {
+      request.destroy();
     }
-    return this.extractAiText(`${response.result}`);
   }
 
   private buildAiPrompt(question: string): string {

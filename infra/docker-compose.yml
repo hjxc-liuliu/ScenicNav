@@ -25,6 +25,24 @@ services:
     volumes:
       - redis-data:/data
 
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./valhalla/custom_files:/custom_files
+    environment:
+      tile_urls: ${VALHALLA_TILE_URLS:-}
+      use_tiles_ignore_pbf: "False"
+      force_rebuild: "False"
+      build_elevation: "False"
+      serve_tiles: "True"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
 volumes:
   mysql-data:
   redis-data:

@@ -85,7 +85,7 @@ public class ScenicDatabase {
     public func scenicSpotsJson(): String {
         let connection = this.connect()
         let statement = connection.prepareStatement(
-            "select id, name, subtitle, crowd_percent, updated_at from scenic_spots order by name"
+            "select id, name, subtitle, crowd_percent, updated_at, longitude, latitude from scenic_spots order by name"
         )
         let result = statement.query()
         var rows = ArrayList<String>()
@@ -95,7 +95,9 @@ public class ScenicDatabase {
                 "\"name\":\"${escapeJson(result.get<String>(2))}\"," +
                 "\"subtitle\":\"${escapeJson(result.get<String>(3))}\"," +
                 "\"crowdPercent\":${result.get<Int32>(4)}," +
-                "\"updatedAt\":\"${escapeJson(result.get<String>(5))}\"}"
+                "\"updatedAt\":\"${escapeJson(result.get<String>(5))}\"," +
+                "\"longitude\":${result.get<Float64>(6)}," +
+                "\"latitude\":${result.get<Float64>(7)}}"
             )
         }
         return "[${String.join(rows.toArray(), delimiter: ",")}]"
